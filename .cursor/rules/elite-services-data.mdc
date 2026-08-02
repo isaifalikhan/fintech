@@ -1,0 +1,14 @@
+---
+description: Service/data layer reliability standards
+globs: src/services/**/*.ts
+alwaysApply: false
+---
+
+# Service and Data Rules
+
+- Keep one source of truth for mutable business data.
+- Avoid isolated module-level seed arrays for production flows.
+- Keep service signatures stable; change internals first.
+- Every successful mutation must update shared store and notify listeners.
+- For local deploy mode, persist and hydrate data via `localStorage` with schema versioning.
+- Remove TODO/demo-only paths from must-not-break flows before release.

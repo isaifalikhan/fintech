@@ -1,0 +1,13 @@
+---
+description: Elite 0.1 core delivery rules
+alwaysApply: true
+---
+
+# Elite Core
+
+- Protect must-not-break flows first: Auth/Redirect, Employee Expenses, Employee Timesheet.
+- Keep UX calm and low-pressure; avoid aggressive CTA patterns.
+- Keep primary workflows at 3 clicks or fewer.
+- Prefer plain language labels over accounting jargon.
+- Keep changes minimal, safe, and backwards compatible with current routes/services.
+- After each substantial change: verify the affected flow before moving on.

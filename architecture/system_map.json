@@ -1,0 +1,162 @@
+{
+  "meta": {
+    "generated_by": "MARQ Code Intelligence OS v3.2",
+    "generated_at": "2026-03-07",
+    "project": "Finance OS for Agencies",
+    "version": "~0.9 (pre-Supabase)",
+    "wiring_coverage": "93–95%"
+  },
+
+  "portals": {
+    "platform_admin": {
+      "entry": "/src/app/components/platform/PlatformDashboard.tsx",
+      "route": "/platform",
+      "guard": "PlatformRoute (platform_admin | platform_manager)",
+      "login_pages": [
+        "/src/app/components/PlatformLoginPage.tsx",
+        "/src/app/components/AdminLoginPage.tsx"
+      ]
+    },
+    "organization_admin": {
+      "entry": "/src/app/components/organization/OrganizationWorkspace.tsx",
+      "route": "/dashboard",
+      "guard": "ProtectedRoute (owner | admin | viewer)",
+      "login_pages": [
+        "/src/app/components/LoginPage.tsx",
+        "/src/app/components/BingLoginPage.tsx"
+      ],
+      "total_views": "~27"
+    },
+    "employee": {
+      "entry": "/src/app/components/employee/EmployeeWorkspace.tsx",
+      "route": "/employee",
+      "guard": "EmployeeRoute (employee | platform_admin | platform_manager)",
+      "login_pages": [
+        "/src/app/components/EmployeeLoginPage.tsx"
+      ],
+      "views": [
+        "EmployeeDashboard",
+        "MyExpenses",
+        "MyTimesheet",
+        "MyProjects",
+        "MyPayslips",
+        "TeamDirectory",
+        "CompanyAnnouncements",
+        "EmployeeSettings",
+        "EmployeeHelp"
+      ]
+    }
+  },
+
+  "routing": {
+    "library": "react-router (v7)",
+    "pattern": "BrowserRouter + Routes/Route (legacy v6 syntax, NOT RouterProvider/createBrowserRouter Data mode)",
+    "file": "/src/app/App.tsx",
+    "note": "System spec in Figma Make mandates RouterProvider Data mode — the app uses the older component-based routing pattern. Functional, but drift from spec."
+  },
+
+  "service_layer": {
+    "count": 18,
+    "location": "/src/services/",
+    "barrel": "/src/services/index.ts",
+    "services": [
+      "authService",
+      "transactionService",
+      "organizationService",
+      "categoryService",
+      "projectService",
+      "departmentService",
+      "accountService",
+      "assetService",
+      "inventoryService",
+      "budgetService",
+      "reportService",
+      "classificationService",
+      "notificationService",
+      "importService",
+      "platformService",
+      "recurringTransactionService",
+      "auditService",
+      "employeeService"
+    ],
+    "data_backend": "In-memory DataStore singleton",
+    "migration_swap_point": "/src/services/dataStore.ts",
+    "migration_target": "Supabase / REST API"
+  },
+
+  "data_layer": {
+    "primary_store": {
+      "file": "/src/services/dataStore.ts",
+      "type": "In-memory singleton (class DataStore)",
+      "seeded_from": "/src/data/mockDatabase.ts",
+      "reactive": true,
+      "collections": [
+        "organizations", "users", "organizationMembers", "accounts", "bankAccounts",
+        "transactions", "categories", "departments", "projects", "assets",
+        "depreciationSchedules", "inventoryItems", "inventoryTransactions",
+        "overheadAllocations", "recurringTransactions", "budgets",
+        "cashFlowForecasts", "activeSessions", "notifications"
+      ]
+    },
+    "secondary_stores": {
+      "employeeService_local_seeds": {
+        "file": "/src/services/employeeService.ts",
+        "type": "Module-level arrays (NOT in DataStore)",
+        "collections": ["seedExpenses", "seedPayslips", "seedTimesheets", "seedTeam", "seedAnnouncements"],
+        "issue": "DRIFT — mutations do not notify listeners, not reset on dataStore.reset()"
+      }
+    },
+    "legacy_files": {
+      "mockData.ts": "/src/lib/mockData.ts — intentional, LoginPage.tsx dev credential tiles only",
+      "mockDatabase.ts": "/src/data/mockDatabase.ts — intentional, dataStore seeding + 4 login page credential tiles"
+    }
+  },
+
+  "hooks": {
+    "useService": {
+      "file": "/src/hooks/useService.ts",
+      "purpose": "Auto-fetch: wraps any () => Promise<ServiceResponse<T>> with loading/error/data/refetch/mutate",
+      "contract": "Expects ServiceResponse<T> wrapper — strips it, exposes raw T as `data`"
+    },
+    "useMutation": {
+      "file": "/src/hooks/useService.ts",
+      "purpose": "Imperative mutations: execute(input) → ServiceResponse<TOutput>"
+    },
+    "useOrgServices": {
+      "file": "/src/hooks/useOrgServices.ts",
+      "purpose": "Bridge hook — injects orgId/userId into every service call, memoised on [orgId, userId]",
+      "namespaces": ["transactions", "accounts", "categories", "departments", "projects", "assets", "inventory", "budgets", "reports", "classification", "notifications", "imports", "org"]
+    }
+  },
+
+  "contexts": {
+    "AuthContext": "/src/contexts/AuthContext.tsx — user, org, role, login, logout, switchOrg, hasPermission",
+    "ThemeContext": "/src/contexts/ThemeContext.tsx",
+    "NotificationContext": "/src/contexts/NotificationContext.tsx",
+    "OnboardingContext": "/src/contexts/OnboardingContext.tsx",
+    "auth_ts_orphan": "/src/contexts/auth.ts — broken re-export, references App.tsx default export (App component), not useAuth"
+  },
+
+  "design_system": {
+    "name": "ECLIPSE",
+    "tokens_file": "/src/styles/eclipse-tokens.ts",
+    "theme": "Neon-glow blue dark, dark purple gradients, glowing blue borders, radial overlays",
+    "token_categories": ["backgrounds", "text", "borders", "shadows", "radialOverlays", "iconBoxes", "charts", "buttons", "badges", "inputs", "containers", "animations"]
+  },
+
+  "ai_engine": {
+    "classification_engine": "/src/lib/classificationEngine.ts",
+    "classification_service": "/src/services/classificationService.ts",
+    "approach": "Rule-based pattern matching + learned corrections stored in DataStore"
+  },
+
+  "external_integrations": {
+    "supabase": "NOT YET CONNECTED — all services have TODO comments with target endpoints",
+    "multi_currency": "Supported via currency field on Transaction/Account/BankAccount",
+    "bank_import": "importService.ts with CSV parsing via importUtils.ts"
+  },
+
+  "testing_infrastructure": "NONE DETECTED — no /tests, /spec, /cypress, /jest.config directories or files found",
+  "monitoring": "NONE DETECTED",
+  "infrastructure_config": "NONE DETECTED — Vite config only"
+}

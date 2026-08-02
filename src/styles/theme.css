@@ -1,0 +1,399 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* 🎨 FINANCE OS 2070 - ALIEN FUTURE DESIGN SYSTEM */
+  
+  /* ===== NEURAL CORE COLORS ===== */
+  --background-void: #000000;
+  --background-base: #0B0F1A; /* Deep Navy */
+  --background-depth-1: #1C2541; /* Soft Indigo */
+  --background-depth-2: #2A1F3D; /* Muted Violet */
+  --background-surface: rgba(230, 234, 242, 0.04);
+  --background-panel: #121826; /* Midnight Blue */
+  
+  /* Neon Accent Colors */
+  --neon-cyan: #3A7DFF; /* Soft Glow Blue */
+  --neon-purple: #6C5CE7; /* Faded Lavender (limited use) */
+  --neon-pink: #2A1F3D; /* keep non-jarring */
+  --neon-green: #1C2541; /* keep non-jarring */
+  --neon-orange: #121826; /* keep non-jarring */
+  --neon-yellow: #E6EAF2; /* neutral */
+  
+  /* Primary Palette */
+  --color-primary: #3A7DFF; /* Soft Glow Blue */
+  --color-primary-glow: rgba(58, 125, 255, 0.15); /* 10–15% */
+  --color-secondary: #2A1F3D; /* Muted Violet */
+  --color-secondary-glow: rgba(42, 31, 61, 0.15); /* 10–15% */
+  --color-success: #22c55e;
+  --color-success-glow: rgba(34, 197, 94, 0.5);
+  --color-danger: #ef4444;
+  --color-danger-glow: rgba(239, 68, 68, 0.5);
+  --color-warning: #f59e0b;
+  --color-warning-glow: rgba(245, 158, 11, 0.5);
+  --color-neutral: #AAB2C5; /* Secondary Text */
+  
+  /* ===== HOLOGRAPHIC GRADIENTS ===== */
+  --gradient-holographic: linear-gradient(135deg, 
+    #0B0F1A 0%, 
+    #1C2541 50%, 
+    #2A1F3D 100%
+  );
+  
+  --gradient-neural: linear-gradient(135deg, 
+    rgba(58, 125, 255, 0.12) 0%, 
+    rgba(42, 31, 61, 0.12) 55%, 
+    rgba(108, 92, 231, 0.10) 100%
+  );
+  
+  --gradient-ambient-from: #0B0F1A;
+  --gradient-ambient-to: #2A1F3D;
+  --gradient-ambient-intensity: 0.72;
+  
+  --gradient-cinematic-left: #1C2541;
+  --gradient-cinematic-right: #3A7DFF;
+  --gradient-cinematic-opacity: 0.4;
+  
+  /* Revenue/Profit Gradients */
+  --gradient-profit: linear-gradient(135deg, #10b981, #059669);
+  --gradient-revenue: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  --gradient-expense: linear-gradient(135deg, #ec4899, #db2777);
+  
+  /* ===== ADVANCED GLASS MORPHISM ===== */
+  --glass-blur-light: 12px;
+  --glass-blur-medium: 18px;
+  --glass-blur-heavy: 24px;
+  --glass-blur-extreme: 32px;
+  
+  --glass-opacity-subtle: 0.03;
+  --glass-opacity-light: 0.06;
+  --glass-opacity-medium: 0.09;
+  --glass-opacity-strong: 0.12;
+  
+  --glass-border-subtle: rgba(255, 255, 255, 0.05);
+  --glass-border-light: rgba(255, 255, 255, 0.08);
+  --glass-border-medium: rgba(255, 255, 255, 0.1);
+  --glass-border-strong: rgba(255, 255, 255, 0.15);
+  
+  /* ===== DEPTH & ELEVATION SYSTEM ===== */
+  --elevation-0: 0;
+  --elevation-1: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --elevation-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --elevation-3: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --elevation-4: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --elevation-5: 0 24px 64px rgba(0, 0, 0, 0.7);
+  
+  /* ===== NEON GLOW SYSTEM ===== */
+  --glow-soft: 0 0 20px;
+  --glow-medium: 0 0 40px;
+  --glow-strong: 0 0 60px;
+  --glow-extreme: 0 0 100px;
+  
+  --glow-cyan-soft: 0 0 20px rgba(45, 212, 255, 0.4);
+  --glow-cyan-medium: 0 0 40px rgba(45, 212, 255, 0.6);
+  --glow-cyan-strong: 0 0 60px rgba(45, 212, 255, 0.8);
+  
+  --glow-purple-soft: 0 0 20px rgba(168, 85, 247, 0.4);
+  --glow-purple-medium: 0 0 40px rgba(168, 85, 247, 0.6);
+  --glow-purple-strong: 0 0 60px rgba(168, 85, 247, 0.8);
+  
+  --glow-pink-soft: 0 0 20px rgba(236, 72, 153, 0.4);
+  --glow-pink-medium: 0 0 40px rgba(236, 72, 153, 0.6);
+  --glow-pink-strong: 0 0 60px rgba(236, 72, 153, 0.8);
+  
+  --glow-green-soft: 0 0 20px rgba(16, 185, 129, 0.4);
+  --glow-green-medium: 0 0 40px rgba(16, 185, 129, 0.6);
+  --glow-green-strong: 0 0 60px rgba(16, 185, 129, 0.8);
+  
+  /* ===== RADIUS SYSTEM ===== */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+  
+  /* ===== SPACING SYSTEM ===== */
+  --spacing-unit: 8px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+  
+  --spacing-card-padding: 24px;
+  --spacing-section-gap: 32px;
+  
+  /* ===== TYPOGRAPHY SYSTEM ===== */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  
+  --font-weight-thin: 200;
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  
+  --font-weight-heading: 600;
+  --font-weight-body: 400;
+  --font-weight-label: 500;
+  --font-weight-numeric: 600;
+  
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-heading: -0.01em;
+  --letter-spacing-body: 0em;
+  --letter-spacing-label: 0.08em;
+  --letter-spacing-numeric: 0.02em;
+  --letter-spacing-wide: 0.1em;
+  
+  /* ===== MOTION SYSTEM ===== */
+  --transition-instant: 100ms;
+  --transition-fast: 150ms;
+  --transition-normal: 220ms;
+  --transition-slow: 350ms;
+  --transition-slower: 500ms;
+  
+  --easing-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --easing-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1);
+  --easing-accelerate: cubic-bezier(0.4, 0.0, 1, 1);
+  --easing-sharp: cubic-bezier(0.4, 0.0, 0.6, 1);
+  
+  --transition-duration: 220ms;
+  --transition-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  
+  --hover-lift: 6px;
+  --hover-glow-multiplier: 1.3;
+  
+  /* ===== Z-INDEX SYSTEM ===== */
+  --z-background: 0;
+  --z-surface: 10;
+  --z-card: 20;
+  --z-elevated: 30;
+  --z-dropdown: 40;
+  --z-sticky: 50;
+  --z-modal: 60;
+  --z-popover: 70;
+  --z-tooltip: 80;
+  --z-cursor: 90;
+  
+  --depth-background: 0;
+  --depth-surface: 2;
+  --depth-card: 4;
+  --depth-overlay: 6;
+  
+  /* ===== CHART SYSTEM ===== */
+  --chart-line-thickness: 3px;
+  --chart-fill-opacity: 0.18;
+  --chart-glow-intensity: 0.6;
+  
+  /* Chart color palette with glow */
+  --chart-color-1: #3A7DFF;
+  --chart-color-2: #1C2541;
+  --chart-color-3: #2A1F3D;
+  --chart-color-4: #6C5CE7;
+  --chart-color-5: #121826;
+  --chart-color-6: #3b82f6;
+  
+  /* ===== SCANLINE EFFECT ===== */
+  --scanline-opacity: 0.03;
+  --scanline-height: 4px;
+  
+  /* ===== LEGACY COMPATIBILITY (for existing components) ===== */
+  --font-size: 16px;
+  --background: var(--background-base);
+  --foreground: #E6EAF2;
+  --card: var(--background-surface);
+  --card-foreground: #E6EAF2;
+  --popover: var(--background-panel);
+  --popover-foreground: #E6EAF2;
+  --primary: var(--color-primary);
+  --primary-foreground: #0B0F1A;
+  --secondary: var(--color-secondary);
+  --secondary-foreground: #E6EAF2;
+  --muted: rgba(230, 234, 242, 0.1);
+  --muted-foreground: var(--color-neutral);
+  --accent: var(--color-primary);
+  --accent-foreground: #0B0F1A;
+  --destructive: var(--color-danger);
+  --destructive-foreground: #E6EAF2;
+  --border: var(--glass-border-light);
+  --input: transparent;
+  --input-background: rgba(230, 234, 242, 0.05);
+  --switch-background: rgba(255, 255, 255, 0.2);
+  --font-weight-medium: var(--font-weight-label);
+  --font-weight-normal: var(--font-weight-body);
+  --ring: var(--color-primary);
+  
+  /* Chart colors with new system */
+  --chart-1: var(--chart-color-1);
+  --chart-2: var(--chart-color-2);
+  --chart-3: var(--chart-color-3);
+  --chart-4: var(--chart-color-4);
+  --chart-5: var(--chart-color-5);
+  
+  --radius: var(--radius-md);
+  
+  /* Sidebar colors */
+  --sidebar: var(--background-panel);
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: var(--color-primary);
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: var(--glass-border-light);
+  --sidebar-ring: var(--color-primary);
+}
+
+.dark {
+  /* Dark mode uses same tokens since we're already dark */
+  --background: var(--background-base);
+  --foreground: #E6EAF2;
+  --card: var(--background-surface);
+  --card-foreground: #E6EAF2;
+  --popover: var(--background-panel);
+  --popover-foreground: #E6EAF2;
+  --primary: var(--color-primary);
+  --primary-foreground: #0B0F1A;
+  --secondary: var(--color-secondary);
+  --secondary-foreground: #E6EAF2;
+  --muted: rgba(230, 234, 242, 0.1);
+  --muted-foreground: var(--color-neutral);
+  --accent: var(--color-primary);
+  --accent-foreground: #0B0F1A;
+  --destructive: var(--color-danger);
+  --destructive-foreground: #E6EAF2;
+  --border: var(--glass-border);
+  --input: rgba(230, 234, 242, 0.05);
+  --ring: var(--color-primary);
+  --sidebar: var(--background-panel);
+  --sidebar-foreground: #E6EAF2;
+  --sidebar-primary: var(--color-primary);
+  --sidebar-primary-foreground: #0B0F1A;
+  --sidebar-accent: rgba(230, 234, 242, 0.1);
+  --sidebar-accent-foreground: #E6EAF2;
+  --sidebar-border: var(--glass-border);
+  --sidebar-ring: var(--color-primary);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-family);
+    font-weight: var(--font-weight-body);
+    letter-spacing: var(--letter-spacing-body);
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+    font-family: var(--font-family);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: var(--letter-spacing-heading);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: var(--letter-spacing-heading);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: var(--letter-spacing-heading);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: var(--letter-spacing-heading);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-label);
+    letter-spacing: var(--letter-spacing-label);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-label);
+    letter-spacing: var(--letter-spacing-body);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-body);
+    letter-spacing: var(--letter-spacing-body);
+    line-height: 1.5;
+  }
+  
+  /* Numeric values (for financial data) */
+  .numeric {
+    font-weight: var(--font-weight-numeric);
+    letter-spacing: var(--letter-spacing-numeric);
+  }
+}

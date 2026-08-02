@@ -1,0 +1,111 @@
+{
+  "project": {
+    "name": "Finance OS",
+    "type": "SaaS Accounting Platform (React Prototype)",
+    "stack": {
+      "frontend": "React 18 + TypeScript + Vite + Tailwind CSS v4 (with CSS variable tokens)",
+      "backend": "None (mock/in-memory services via DataStore + localStorage demo state)",
+      "database": "In-memory DataStore singleton + localStorage (schema v2): identity seed only; business data grows from user actions",
+      "infra": "Vite dev server only (no external infra configured)"
+    }
+  },
+  "domains": [
+    {
+      "name": "Authentication & Access Control",
+      "path": "/login/* and /",
+      "responsibility": "Login entry points, session restore, and role-based route guards (ProtectedRoute/PlatformRoute/EmployeeRoute)."
+    },
+    {
+      "name": "Platform Admin Console",
+      "path": "/platform",
+      "responsibility": "Super/admin workspace: organization management and Plans & Billing UI."
+    },
+    {
+      "name": "Organization Workspace (Business Owner)",
+      "path": "/dashboard and /organization/*",
+      "responsibility": "Org-level cockpit dashboard and finance tools (transactions, reports, logic learning)."
+    },
+    {
+      "name": "Team Member Workspace",
+      "path": "/employee",
+      "responsibility": "Limited-access employee UI under EmployeeRoute guard."
+    }
+  ],
+  "critical_flows": [
+    {
+      "id": "FLOW-001",
+      "name": "Login -> session restore -> role-protected navigation",
+      "entry_points": [
+        "/",
+        "/login",
+        "/login/admin",
+        "/login/platform",
+        "/login/employee",
+        "/login/bing"
+      ],
+      "steps": [
+        "User submits credentials to the appropriate login page; `AuthContext.login()` calls `authService.login()`.",
+        "On successful login, `AuthContext` stores `finance_os_token` in `localStorage` and applies the returned session (user/org/membership).",
+        "`AuthContext` derives `userRole` and loads organizations (platform roles load all orgs; org members load memberships).",
+        "Router guards in `src/app/App.tsx` (`ProtectedRoute` / `PlatformRoute` / `EmployeeRoute`) validate authentication + allowed roles and navigate to `authService.getRedirectPath()` when needed.",
+        "On refresh, `AuthContext` restores the session by reading `finance_os_token` and calling `authService.getSession(token)`."
+      ],
+      "protected_outcomes": [
+        "Protected routes remain inaccessible to unauthenticated users.",
+        "Role-based routing lands users in the correct workspace (`/platform`, `/employee`, or `/dashboard`).",
+        "Organizations list is correct for platform admins/managers vs org members."
+      ],
+      "protected_files": [
+        "src/app/App.tsx",
+        "src/contexts/AuthContext.tsx",
+        "src/services/authService.ts",
+        "src/services/organizationService.ts"
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "from": "AuthContext (src/contexts/AuthContext.tsx)",
+      "to": "authService (src/services/authService.ts)",
+      "reason": "Implements login + session restore and provides redirect/role mapping inputs."
+    },
+    {
+      "from": "AuthContext (src/contexts/AuthContext.tsx)",
+      "to": "organizationService (src/services/organizationService.ts)",
+      "reason": "Loads organizations list for platform admins/managers."
+    },
+    {
+      "from": "App routing (src/app/App.tsx)",
+      "to": "ProtectedRoute/PlatformRoute/EmployeeRoute guards",
+      "reason": "Enforces role-based navigation to protected zones."
+    }
+  ],
+  "risks": [
+    {
+      "id": "R-001",
+      "severity": "medium",
+      "file": "src/services/authService.ts",
+      "description": "Demo login ignores password contents and effectively authenticates by email (migration required before production)."
+    },
+    {
+      "id": "R-002",
+      "severity": "high",
+      "file": "src/services/employeeService.ts",
+      "description": "Employee service uses isolated module-level seed arrays instead of the DataStore singleton, risking data drift and inconsistent updates."
+    },
+    {
+      "id": "R-003",
+      "severity": "critical",
+      "file": "src/app/components/employee/MyExpenses.tsx and src/app/components/employee/MyTimesheet.tsx",
+      "description": "Critical interactive flows appear incomplete (uncontrolled/unhandled form inputs; timer stop does not create a timesheet entry)."
+    }
+  ],
+  "protected_zones": [
+    "auth",
+    "billing",
+    "redirects",
+    "trial_flow",
+    "paid_flow"
+  ]
+}
+

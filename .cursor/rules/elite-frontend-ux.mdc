@@ -1,0 +1,14 @@
+---
+description: Frontend UX and AI interaction standards
+globs: src/app/components/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend UX Rules
+
+- Design for layman clarity: use plain labels and short helper text.
+- For AI surfaces, show confidence + short reason when suggesting actions.
+- Use progressive disclosure for advanced options ("More options"), not crowded forms.
+- One primary action per screen section.
+- Replace mock fallback behavior with loading/empty states in critical flows.
+- Preserve journaling feel for AI input: large, subtle, low-contrast controls.

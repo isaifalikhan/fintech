@@ -1,0 +1,149 @@
+{
+  "meta": {
+    "generated_by": "MARQ Code Intelligence OS v3.2",
+    "generated_at": "2026-03-07",
+    "project": "Finance OS for Agencies"
+  },
+
+  "violations": [
+
+    {
+      "id": "PV-001",
+      "pattern": "ALL service mutations must call dataStore.notify(collectionName)",
+      "violation": "employeeService.createExpense(), submitExpense(), createTimesheetEntry(), submitTimesheet() mutate local module arrays — never call dataStore.notify()",
+      "file": "/src/services/employeeService.ts",
+      "lines": "130–172",
+      "severity": "HIGH",
+      "confidence": "PROVEN",
+      "category": "data_layer_drift",
+      "compliant_example": "/src/services/recurringTransactionService.ts lines 22-23 — calls dataStore.notify('recurringTransactions')"
+    },
+
+    {
+      "id": "PV-002",
+      "pattern": "useService() receives () => Promise<ServiceResponse<T>> — do NOT pre-strip the ServiceResponse wrapper",
+      "violation": "EmployeeDashboard.tsx passes .then(r => r.data) to useService — strips ServiceResponse before the hook sees it, causing the hook's success check (response.success) to fail on the raw object",
+      "file": "/src/app/components/employee/EmployeeDashboard.tsx",
+      "line": 62,
+      "severity": "HIGH",
+      "confidence": "PROVEN",
+      "category": "hook_contract_violation",
+      "broken_code": "() => employeeService.getDashboardSummary(orgId, userId).then(r => r.data)",
+      "correct_code": "() => employeeService.getDashboardSummary(orgId, userId)"
+    },
+
+    {
+      "id": "PV-003",
+      "pattern": "After useService() strips ServiceResponse, access the payload directly — NOT via .data property",
+      "violation": "MyProjects.tsx accesses projectsData?.data?.length and projectsData.data.map() — 'data' is not a property of PaginatedResult; correct key is 'items'",
+      "file": "/src/app/components/employee/MyProjects.tsx",
+      "lines": "41–55",
+      "severity": "MEDIUM",
+      "confidence": "PROVEN",
+      "category": "data_access_pattern",
+      "broken_code": "projectsData?.data?.length ? projectsData.data.map(...)",
+      "correct_code": "projectsData?.items?.length ? projectsData.items.map(...)"
+    },
+
+    {
+      "id": "PV-004",
+      "pattern": "All re-exports in /src/contexts/ must point to valid named exports",
+      "violation": "auth.ts re-exports `{ default as useAuth }` from '../app/App' — App.tsx default export is the App component, not useAuth. This export resolves to the App component, not the hook.",
+      "file": "/src/contexts/auth.ts",
+      "line": 3,
+      "severity": "LOW",
+      "confidence": "PROVEN",
+      "category": "orphan_file",
+      "correct_code": "export { useAuth } from './AuthContext';"
+    },
+
+    {
+      "id": "PV-005",
+      "pattern": "All interactive form inputs MUST have value + onChange state bindings before submission is possible",
+      "violation": "MyExpenses.tsx new-expense form inputs have no value/onChange — uncontrolled, uncollectable. Submit button has no handler.",
+      "file": "/src/app/components/employee/MyExpenses.tsx",
+      "lines": "153–179",
+      "severity": "CRITICAL",
+      "confidence": "PROVEN",
+      "category": "unimplemented_crud"
+    },
+
+    {
+      "id": "PV-006",
+      "pattern": "Timer start/stop must call createTimesheetEntry() on stop",
+      "violation": "MyTimesheet.tsx timer only toggles isTimerRunning boolean — no entry creation, no service call on stop",
+      "file": "/src/app/components/employee/MyTimesheet.tsx",
+      "lines": "122–133",
+      "severity": "CRITICAL",
+      "confidence": "PROVEN",
+      "category": "unimplemented_crud"
+    },
+
+    {
+      "id": "PV-007",
+      "pattern": "All services must use the DataStore singleton from /src/services/dataStore.ts as their data source",
+      "violation": "employeeService defines five isolated module-level seed arrays (seedExpenses, seedPayslips, seedTimesheets, seedTeam, seedAnnouncements). These are not in DataStore and are not reset by dataStore.reset().",
+      "file": "/src/services/employeeService.ts",
+      "lines": "81–119",
+      "severity": "HIGH",
+      "confidence": "PROVEN",
+      "category": "data_isolation_drift"
+    },
+
+    {
+      "id": "PV-008",
+      "pattern": "Authentication must validate both email AND password",
+      "violation": "authService.login() ignores the password entirely — only email is checked (line 34: const { email } = credentials)",
+      "file": "/src/services/authService.ts",
+      "line": 34,
+      "severity": "MEDIUM",
+      "confidence": "PROVEN",
+      "category": "security_auth",
+      "note": "Intentional in demo mode — MUST be replaced by Supabase signInWithPassword before production"
+    },
+
+    {
+      "id": "PV-009",
+      "pattern": "Routing pattern should use RouterProvider + createBrowserRouter (Data mode per system spec)",
+      "violation": "App.tsx uses BrowserRouter + Routes/Route (v6 component-based pattern) instead of createBrowserRouter + RouterProvider",
+      "file": "/src/app/App.tsx",
+      "lines": "1, 176–270",
+      "severity": "LOW",
+      "confidence": "PROVEN",
+      "category": "architecture_drift",
+      "note": "Functional — not a bug. Deviation from Figma Make system spec only. Low priority unless migrating to loader-based data fetching."
+    },
+
+    {
+      "id": "PV-010",
+      "pattern": "Duplicate workspace components should be pruned — single source of truth per portal",
+      "violation": "Three OrganizationDashboard files exist: OrganizationDashboard.tsx, OrganizationDashboardModern.tsx, OrganizationDashboardTest.tsx. Only OrganizationDashboardModern.tsx is imported in App.tsx routes.",
+      "files": [
+        "/src/app/components/OrganizationDashboard.tsx",
+        "/src/app/components/OrganizationDashboardModern.tsx",
+        "/src/app/components/OrganizationDashboardTest.tsx"
+      ],
+      "severity": "LOW",
+      "confidence": "PROVEN",
+      "category": "dead_code_drift"
+    }
+  ],
+
+  "summary": {
+    "total_violations": 10,
+    "critical": 2,
+    "high": 3,
+    "medium": 2,
+    "low": 3,
+    "categories": {
+      "unimplemented_crud": 2,
+      "data_layer_drift": 2,
+      "hook_contract_violation": 1,
+      "data_access_pattern": 1,
+      "orphan_file": 1,
+      "security_auth": 1,
+      "architecture_drift": 1,
+      "dead_code_drift": 1
+    }
+  }
+}

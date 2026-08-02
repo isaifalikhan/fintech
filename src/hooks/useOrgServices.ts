@@ -1,0 +1,555 @@
+/**
+ * useOrgServices — Phase 2 Bridge Hook
+ * ========================================
+ * Wraps every service with the current organization (and user) context so
+ * components never have to pass `organizationId` / `userId` manually.
+ *
+ * REPLACES: useDataService.ts (synchronous, reads directly from mockDatabase arrays)
+ * UPGRADE:  All methods are async, routed through the real service layer
+ *           (transactionService, accountService, …) which read/write via
+ *           dataStore.ts — the single swap point for a future REST / Supabase backend.
+ *
+ * ─── Namespace overview ───────────────────────────────────────────────────
+ *   const svc = useOrgServices();
+ *
+ *   svc.transactions.getAll({ search: 'Stripe', page: 1 })
+ *   svc.transactions.create({ … })
+ *   svc.transactions.bulkCategorize(['txn-1', 'txn-2'], 'cat-expenses')
+ *
+ *   svc.accounts.getAll()
+ *   svc.accounts.getBankAccounts()
+ *   svc.accounts.getBalanceSheet()
+ *
+ *   svc.reports.getDashboardSummary()
+ *   svc.reports.getCashFlow(6)
+ *   svc.reports.getForecast(3)
+ *
+ *   svc.classification.classify('STRIPE PAYMENT', 500, 'credit')
+ *   svc.classification.learnFromCorrection(txnId, correctCategoryId)
+ *
+ *   svc.notifications.getAll()
+ *   svc.notifications.markAllAsRead()
+ *
+ *   svc.imports.previewFile(file)
+ *   svc.imports.executeImport(uploadId, bankAccountId, mapping, { autoClassify: true })
+ *
+ *   svc.org.getMembers()
+ *   svc.org.addMember(userId, 'editor')
+ *
+ *   // Meta helpers
+ *   svc.orgId        // current org ID string
+ *   svc.userId       // current user ID string
+ *   svc.isReady      // false when no org is selected (prevents premature calls)
+ *
+ * ─── Usage with useService / useMutation hooks ────────────────────────────
+ *   const svc = useOrgServices();
+ *
+ *   // Auto-fetch on mount:
+ *   const { data, loading, error, refetch } = useService(
+ *     () => svc.transactions.getAll({ page: 1 }),
+ *     [svc.orgId]
+ *   );
+ *
+ *   // Mutations:
+ *   const createTxn = useMutation((data) => svc.transactions.create(data));
+ *   await createTxn.execute({ description: 'New Invoice', amount: 5000, … });
+ *
+ * ─── Migration path ───────────────────────────────────────────────────────
+ *   When wiring to a real backend, ONLY the service files change.
+ *   This hook, its callers, and all UI components stay identical.
+ */
+
+import { useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Services
+import { transactionService }    from '@/services/transactionService';
+import { accountService }        from '@/services/accountService';
+import { categoryService }       from '@/services/categoryService';
+import { departmentService }     from '@/services/departmentService';
+import { projectService }        from '@/services/projectService';
+import { assetService }          from '@/services/assetService';
+import { inventoryService }      from '@/services/inventoryService';
+import { budgetService }         from '@/services/budgetService';
+import { reportService }         from '@/services/reportService';
+import { classificationService } from '@/services/classificationService';
+import { notificationService }   from '@/services/notificationService';
+import { importService }         from '@/services/importService';
+import { organizationService }   from '@/services/organizationService';
+import { recurringTransactionService } from '@/services/recurringTransactionService';
+import { loanService } from '@/services/loanService';
+
+// Types — re-exported so callers can import everything from one place
+import type {
+  TransactionFilters,
+  PaginationParams,
+  ServiceResponse,
+  PaginatedResult,
+  DashboardSummary,
+  CashFlowSummary,
+  ProfitLossReport,
+  BalanceSheetReport,
+  DepartmentProfitability,
+  ProjectProfitability,
+  BulkOperationResult,
+  ImportPreview,
+  ImportResult,
+  ImportHistoryRecord,
+} from '@/services/types';
+
+import type { ImportedTransaction } from '@/lib/importUtils';
+import type {
+  Account,
+  BankAccount,
+  Transaction,
+  Category,
+  Department,
+  Project,
+  Asset,
+  DepreciationSchedule,
+  InventoryItem,
+  InventoryTransaction,
+  OverheadAllocation,
+  Budget,
+  Organization,
+  OrganizationMember,
+  UserRole,
+  RecurringTransaction,
+} from '@/services/types';
+
+import type { ClassificationRule, ClassificationResult } from '@/lib/classificationEngine';
+
+// ─── Public type of the returned object (for components that want to type it) ──
+
+export interface OrgServices {
+  /** Current org ID — changes when user switches orgs */
+  orgId: string;
+  /** Current user ID */
+  userId: string;
+  /**
+   * false when no organization is currently selected.
+   * Gate service calls behind this flag to avoid no-op requests.
+   */
+  isReady: boolean;
+
+  // ── Namespaced service bundles ───────────────────────────────────────────
+
+  transactions: TransactionServices;
+  accounts:     AccountServices;
+  categories:   CategoryServices;
+  departments:  DepartmentServices;
+  projects:     ProjectServices;
+  assets:       AssetServices;
+  inventory:    InventoryServices;
+  budgets:      BudgetServices;
+  loans:        LoanServices;
+  reports:      ReportServices;
+  classification: ClassificationServices;
+  notifications:  NotificationServices;
+  imports:        ImportServices;
+  org:            OrgAdminServices;
+  recurring:      RecurringServices;
+}
+
+// ── Namespace type declarations ──────────────────────────────────────────────
+
+export interface TransactionServices {
+  /** Paginated list with filtering */
+  getAll(filters?: TransactionFilters): ReturnType<typeof transactionService.getAll>;
+  getById(id: string): ReturnType<typeof transactionService.getById>;
+  create(data: Omit<Transaction, 'id' | 'organizationId' | 'createdAt'>): ReturnType<typeof transactionService.create>;
+  update(id: string, updates: Partial<Transaction>): ReturnType<typeof transactionService.update>;
+  delete(id: string): ReturnType<typeof transactionService.delete>;
+  bulkCategorize(ids: string[], categoryId: string, classifiedBy?: string): ReturnType<typeof transactionService.bulkCategorize>;
+  bulkDelete(ids: string[]): ReturnType<typeof transactionService.bulkDelete>;
+  getStats(dateFrom?: string, dateTo?: string): ReturnType<typeof transactionService.getStats>;
+}
+
+export interface AccountServices {
+  /** Chart of accounts */
+  getAll(): ReturnType<typeof accountService.getAll>;
+  getById(id: string): ReturnType<typeof accountService.getById>;
+  create(data: Omit<Account, 'id' | 'organizationId' | 'createdAt'>): ReturnType<typeof accountService.create>;
+  update(id: string, updates: Partial<Account>): ReturnType<typeof accountService.update>;
+  delete(id: string): ReturnType<typeof accountService.delete>;
+  getAccountTree(): ReturnType<typeof accountService.getAccountTree>;
+  /** Bank accounts linked to this org */
+  getBankAccounts(): ReturnType<typeof accountService.getBankAccounts>;
+  createBankAccount(data: Omit<BankAccount, 'id' | 'organizationId'>): ReturnType<typeof accountService.createBankAccount>;
+  updateBankAccount(id: string, updates: Partial<BankAccount>): ReturnType<typeof accountService.updateBankAccount>;
+  deleteBankAccount(id: string): ReturnType<typeof accountService.deleteBankAccount>;
+  getBalanceSheet(asOfDate?: string): ReturnType<typeof accountService.getBalanceSheet>;
+}
+
+export interface CategoryServices {
+  getAll(): ReturnType<typeof categoryService.getAll>;
+  getById(id: string): ReturnType<typeof categoryService.getById>;
+  create(data: Omit<Category, 'id' | 'organizationId'>): ReturnType<typeof categoryService.create>;
+  update(id: string, updates: Partial<Category>): ReturnType<typeof categoryService.update>;
+  delete(id: string): ReturnType<typeof categoryService.delete>;
+  addPattern(categoryId: string, pattern: string): ReturnType<typeof categoryService.addPattern>;
+  removePattern(categoryId: string, pattern: string): ReturnType<typeof categoryService.removePattern>;
+  getUsageStats(): ReturnType<typeof categoryService.getUsageStats>;
+}
+
+export interface DepartmentServices {
+  getAll(): ReturnType<typeof departmentService.getAll>;
+  getById(id: string): ReturnType<typeof departmentService.getById>;
+  create(data: Omit<Department, 'id' | 'organizationId'>): ReturnType<typeof departmentService.create>;
+  update(id: string, updates: Partial<Department>): ReturnType<typeof departmentService.update>;
+  delete(id: string): ReturnType<typeof departmentService.delete>;
+  /** Department-level P&L with overhead allocation */
+  getProfitability(): ReturnType<typeof departmentService.getProfitability>;
+}
+
+export interface RecurringServices {
+  getAll(): ReturnType<typeof recurringTransactionService.getAll>;
+  create(data: Omit<RecurringTransaction, 'id' | 'organizationId'>): ReturnType<typeof recurringTransactionService.create>;
+  update(id: string, updates: Partial<RecurringTransaction>): ReturnType<typeof recurringTransactionService.update>;
+  delete(id: string): ReturnType<typeof recurringTransactionService.delete>;
+  toggle(id: string): ReturnType<typeof recurringTransactionService.toggle>;
+}
+
+export interface ProjectServices {
+  getAll(): ReturnType<typeof projectService.getAll>;
+  getById(id: string): ReturnType<typeof projectService.getById>;
+  create(data: Omit<Project, 'id' | 'organizationId'>): ReturnType<typeof projectService.create>;
+  update(id: string, updates: Partial<Project>): ReturnType<typeof projectService.update>;
+  delete(id: string): ReturnType<typeof projectService.delete>;
+  /** Quoted vs actual cost, margin %, budget variance */
+  getProfitability(): ReturnType<typeof projectService.getProfitability>;
+  getProjectTransactions(projectId: string): ReturnType<typeof projectService.getProjectTransactions>;
+}
+
+export interface AssetServices {
+  getAll(): ReturnType<typeof assetService.getAll>;
+  getById(id: string): ReturnType<typeof assetService.getById>;
+  create(data: Omit<Asset, 'id' | 'organizationId'>): ReturnType<typeof assetService.create>;
+  update(id: string, updates: Partial<Asset>): ReturnType<typeof assetService.update>;
+  dispose(id: string, disposalDate: string, disposalAmount: number): ReturnType<typeof assetService.dispose>;
+  listDepreciationSchedules(): ReturnType<typeof assetService.listDepreciationSchedules>;
+  getDepreciationSchedule(assetId: string): ReturnType<typeof assetService.getDepreciationSchedule>;
+  postDepreciation(assetId: string, period: string): ReturnType<typeof assetService.postDepreciation>;
+  getSummary(): ReturnType<typeof assetService.getSummary>;
+}
+
+export interface InventoryServices {
+  getAll(): ReturnType<typeof inventoryService.getAll>;
+  getById(id: string): ReturnType<typeof inventoryService.getById>;
+  create(data: Omit<InventoryItem, 'id' | 'organizationId'>): ReturnType<typeof inventoryService.create>;
+  update(id: string, updates: Partial<InventoryItem>): ReturnType<typeof inventoryService.update>;
+  recordTransaction(data: Omit<InventoryTransaction, 'id' | 'organizationId'>): ReturnType<typeof inventoryService.recordTransaction>;
+  getTransactions(inventoryItemId: string): ReturnType<typeof inventoryService.getTransactions>;
+  getAllTransactions(): ReturnType<typeof inventoryService.getAllTransactions>;
+  getLowStockAlerts(): ReturnType<typeof inventoryService.getLowStockAlerts>;
+  getValuation(): ReturnType<typeof inventoryService.getValuation>;
+}
+
+export interface BudgetServices {
+  getAll(): ReturnType<typeof budgetService.getAll>;
+  getById(id: string): ReturnType<typeof budgetService.getById>;
+  create(data: Omit<Budget, 'id' | 'organizationId'>): ReturnType<typeof budgetService.create>;
+  update(id: string, updates: Partial<Budget>): ReturnType<typeof budgetService.update>;
+  delete(id: string): ReturnType<typeof budgetService.delete>;
+  getVarianceAnalysis(): ReturnType<typeof budgetService.getVarianceAnalysis>;
+  /** Budgets at ≥ 80% utilization */
+  getAlerts(): ReturnType<typeof budgetService.getAlerts>;
+}
+
+export interface LoanServices {
+  getAll(): ReturnType<typeof loanService.getAll>;
+  getById(id: string): ReturnType<typeof loanService.getById>;
+  create(data: Omit<Loan, 'id' | 'organizationId'>): ReturnType<typeof loanService.create>;
+  update(id: string, updates: Partial<Loan>): ReturnType<typeof loanService.update>;
+  delete(id: string): ReturnType<typeof loanService.delete>;
+}
+
+export interface ReportServices {
+  /** Top-level KPI summary for the dashboard */
+  getDashboardSummary(): ReturnType<typeof reportService.getDashboardSummary>;
+  getProfitLoss(dateFrom?: string, dateTo?: string): ReturnType<typeof reportService.getProfitLoss>;
+  getCashFlow(months?: number): ReturnType<typeof reportService.getCashFlow>;
+  getExpenseBreakdown(): ReturnType<typeof reportService.getExpenseBreakdown>;
+  getRevenueBreakdown(): ReturnType<typeof reportService.getRevenueBreakdown>;
+  /** AI-powered cash flow forecast */
+  getForecast(monthsAhead?: number): ReturnType<typeof reportService.getForecast>;
+}
+
+export interface ClassificationServices {
+  /** AI-classify a single transaction narration */
+  classify(narration: string, amount: number, type: 'debit' | 'credit'): ReturnType<typeof classificationService.classify>;
+  batchClassify(
+    transactions: Array<{ narration: string; amount: number; type: 'debit' | 'credit' }>
+  ): ReturnType<typeof classificationService.batchClassify>;
+  /** Update model from user correction */
+  learnFromCorrection(transactionId: string, correctCategoryId: string): ReturnType<typeof classificationService.learnFromCorrection>;
+  getRules(): ReturnType<typeof classificationService.getRules>;
+  addRule(rule: Omit<ClassificationRule, 'id'>): ReturnType<typeof classificationService.addRule>;
+  deleteRule(ruleId: string): ReturnType<typeof classificationService.deleteRule>;
+  getStats(): ReturnType<typeof classificationService.getStats>;
+}
+
+export interface NotificationServices {
+  /** Fetch all notifications for the current user in this org */
+  getAll(): ReturnType<typeof notificationService.getAll>;
+  getUnreadCount(): ReturnType<typeof notificationService.getUnreadCount>;
+  markAsRead(notificationId: string): ReturnType<typeof notificationService.markAsRead>;
+  markAllAsRead(): ReturnType<typeof notificationService.markAllAsRead>;
+  /**
+   * Create a notification scoped to the current user + org.
+   * `userId` and `organizationId` are automatically injected.
+   */
+  create(
+    notification: Omit<Notification, 'id' | 'createdAt' | 'userId' | 'organizationId'>
+  ): ReturnType<typeof notificationService.create>;
+  delete(notificationId: string): ReturnType<typeof notificationService.delete>;
+}
+
+export interface ImportServices {
+  /** Parse & preview a bank statement file (no data written yet) */
+  previewFile(file: File): ReturnType<typeof importService.previewFile>;
+  executeImport(
+    uploadId: string,
+    bankAccountId: string,
+    columnMapping: Record<string, string>,
+    options?: { skipDuplicates?: boolean; autoClassify?: boolean; currency?: string }
+  ): ReturnType<typeof importService.executeImport>;
+  /** Client-parsed CSV rows → ledger (SETTLE-001) */
+  commitParsedImport(
+    bankAccountId: string,
+    currency: string,
+    fileName: string,
+    rows: ImportedTransaction[],
+    options?: { skipDuplicates?: boolean; autoClassify?: boolean }
+  ): ReturnType<typeof importService.commitParsedImport>;
+  getHistory(): ReturnType<typeof importService.getHistory>;
+}
+
+export interface OrgAdminServices {
+  /** Current org details */
+  get(): ReturnType<typeof organizationService.getById>;
+  update(updates: Partial<Organization>): ReturnType<typeof organizationService.update>;
+  delete(): ReturnType<typeof organizationService.delete>;
+  /** Members of this organization (with embedded user records) */
+  getMembers(): ReturnType<typeof organizationService.getMembers>;
+  addMember(userId: string, role: UserRole): ReturnType<typeof organizationService.addMember>;
+  updateMemberRole(userId: string, newRole: UserRole): ReturnType<typeof organizationService.updateMemberRole>;
+  removeMember(userId: string): ReturnType<typeof organizationService.removeMember>;
+}
+
+// ─── The hook ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a stable, org-scoped bundle of every service method.
+ *
+ * The returned object is re-created only when `orgId` or `userId` changes
+ * (i.e. on login, logout, or org switch), so it is safe to pass as a prop
+ * or include in useEffect/useService dependency arrays.
+ */
+export function useOrgServices(): OrgServices {
+  const { currentOrganization, user } = useAuth();
+
+  const orgId  = currentOrganization?.id  ?? '';
+  const userId = user?.id                 ?? '';
+
+  return useMemo<OrgServices>(() => ({
+    orgId,
+    userId,
+    isReady: !!orgId,
+
+    // ── Transactions ────────────────────────────────────────────────────────
+    transactions: {
+      getAll:           (filters?)           => transactionService.getAll(orgId, filters),
+      getById:          (id)                 => transactionService.getById(id, orgId || undefined),
+      create:           (data)               => transactionService.create(orgId, data),
+      update:           (id, updates)        => transactionService.update(id, updates, orgId || undefined),
+      delete:           (id)                 => transactionService.delete(id, orgId || undefined),
+      bulkCategorize:   (ids, catId, by)     => transactionService.bulkCategorize(orgId, ids, catId, by),
+      bulkDelete:       (ids)                => transactionService.bulkDelete(orgId, ids),
+      getStats:         (from?, to?)         => transactionService.getStats(orgId, from, to),
+    },
+
+    // ── Chart of Accounts + Bank Accounts ───────────────────────────────────
+    accounts: {
+      getAll:             ()              => accountService.getAll(orgId),
+      getById:            (id)            => accountService.getById(id, orgId || undefined),
+      create:             (data)          => accountService.create(orgId, data),
+      update:             (id, updates)   => accountService.update(id, updates, orgId || undefined),
+      delete:             (id)            => accountService.delete(id, orgId || undefined),
+      getAccountTree:     ()              => accountService.getAccountTree(orgId),
+      getBankAccounts:    ()              => accountService.getBankAccounts(orgId),
+      createBankAccount:  (data)          => accountService.createBankAccount(orgId, data),
+      updateBankAccount:  (id, updates)   => accountService.updateBankAccount(id, updates, orgId || undefined),
+      deleteBankAccount:  (id)            => accountService.deleteBankAccount(id, orgId || undefined),
+      getBalanceSheet:    (asOf?)         => accountService.getBalanceSheet(orgId, asOf),
+    },
+
+    // ── Categories ──────────────────────────────────────────────────────────
+    categories: {
+      getAll:         ()                      => categoryService.getAll(orgId),
+      getById:        (id)                    => categoryService.getById(id, orgId || undefined),
+      create:         (data)                  => categoryService.create(orgId, data),
+      update:         (id, updates)           => categoryService.update(id, updates, orgId || undefined),
+      delete:         (id)                    => categoryService.delete(id, orgId || undefined),
+      addPattern:     (catId, pattern)        => categoryService.addPattern(catId, pattern, orgId || undefined),
+      removePattern:  (catId, pattern)        => categoryService.removePattern(catId, pattern, orgId || undefined),
+      getUsageStats:  ()                      => categoryService.getUsageStats(orgId),
+    },
+
+    // ── Departments ─────────────────────────────────────────────────────────
+    departments: {
+      getAll:           ()              => departmentService.getAll(orgId),
+      getById:          (id)            => departmentService.getById(id, orgId || undefined),
+      create:           (data)          => departmentService.create(orgId, data),
+      update:           (id, updates)   => departmentService.update(id, updates, orgId || undefined),
+      delete:           (id)            => departmentService.delete(id, orgId || undefined),
+      getProfitability: ()              => departmentService.getProfitability(orgId),
+    },
+
+    // ── Projects ────────────────────────────────────────────────────────────
+    projects: {
+      getAll:                 ()              => projectService.getAll(orgId),
+      getById:                (id)            => projectService.getById(id, orgId || undefined),
+      create:                 (data)          => projectService.create(orgId, data),
+      update:                 (id, updates)   => projectService.update(id, updates, orgId || undefined),
+      delete:                 (id)            => projectService.delete(id, orgId || undefined),
+      getProfitability:       ()              => projectService.getProfitability(orgId),
+      getProjectTransactions: (projId)        => projectService.getProjectTransactions(projId, orgId || undefined),
+    },
+
+    // ── Fixed Assets + Depreciation ─────────────────────────────────────────
+    assets: {
+      getAll:                   ()                               => assetService.getAll(orgId),
+      getById:                  (id)                             => assetService.getById(id, orgId || undefined),
+      create:                   (data)                           => assetService.create(orgId, data),
+      update:                   (id, updates)                    => assetService.update(id, updates, orgId || undefined),
+      dispose:                  (id, date, amount)               => assetService.dispose(id, date, amount, orgId || undefined),
+      listDepreciationSchedules: ()                              => assetService.listDepreciationSchedules(orgId),
+      getDepreciationSchedule:  (assetId)                        => assetService.getDepreciationSchedule(assetId, orgId || undefined),
+      postDepreciation:         (assetId, period)                => assetService.postDepreciation(assetId, period, orgId || undefined),
+      getSummary:               ()                               => assetService.getSummary(orgId),
+    },
+
+    // ── Inventory ───────────────────────────────────────────────────────────
+    inventory: {
+      getAll:               ()              => inventoryService.getAll(orgId),
+      getById:              (id)            => inventoryService.getById(id, orgId || undefined),
+      create:               (data)          => inventoryService.create(orgId, data),
+      update:               (id, updates)   => inventoryService.update(id, updates, orgId || undefined),
+      recordTransaction:    (data)          => inventoryService.recordTransaction(orgId, data),
+      getTransactions:      (itemId)        => inventoryService.getTransactions(itemId, orgId || undefined),
+      getAllTransactions:   ()              => inventoryService.getAllTransactions(orgId),
+      getLowStockAlerts:    ()              => inventoryService.getLowStockAlerts(orgId),
+      getValuation:         ()              => inventoryService.getValuation(orgId),
+    },
+
+    // ── Budgets ─────────────────────────────────────────────────────────────
+    budgets: {
+      getAll:               ()              => budgetService.getAll(orgId),
+      getById:              (id)            => budgetService.getById(id, orgId || undefined),
+      create:               (data)          => budgetService.create(orgId, data),
+      update:               (id, updates)   => budgetService.update(id, updates, orgId || undefined),
+      delete:               (id)            => budgetService.delete(id, orgId || undefined),
+      getVarianceAnalysis:  ()              => budgetService.getVarianceAnalysis(orgId),
+      getAlerts:            ()              => budgetService.getAlerts(orgId),
+    },
+
+    loans: {
+      getAll:   ()                => loanService.getAll(orgId),
+      getById:  (id)              => loanService.getById(id),
+      create:   (data)           => loanService.create(orgId, data),
+      update:   (id, updates)    => loanService.update(id, updates),
+      delete:   (id)             => loanService.delete(id),
+    },
+
+    // ── Financial Reports ───────────────────────────────────────────────────
+    reports: {
+      getDashboardSummary:  ()                  => reportService.getDashboardSummary(orgId),
+      getProfitLoss:        (from?, to?)        => reportService.getProfitLoss(orgId, from, to),
+      getCashFlow:          (months?)           => reportService.getCashFlow(orgId, months),
+      getExpenseBreakdown:  ()                  => reportService.getExpenseBreakdown(orgId),
+      getRevenueBreakdown:  ()                  => reportService.getRevenueBreakdown(orgId),
+      getForecast:          (monthsAhead?)      => reportService.getForecast(orgId, monthsAhead),
+    },
+
+    // ── AI Classification Engine ─────────────────────────────────────────────
+    classification: {
+      classify:             (narration, amount, type) => classificationService.classify(orgId, narration, amount, type),
+      batchClassify:        (txns)                    => classificationService.batchClassify(orgId, txns),
+      learnFromCorrection:  (txnId, catId)            => classificationService.learnFromCorrection(orgId, txnId, catId),
+      getRules:             ()                        => classificationService.getRules(orgId || undefined),
+      addRule:              (rule)                    => classificationService.addRule(rule, orgId || undefined),
+      deleteRule:           (ruleId)                  => classificationService.deleteRule(ruleId, orgId || undefined),
+      getStats:             ()                        => classificationService.getStats(orgId),
+    },
+
+    // ── Notifications ───────────────────────────────────────────────────────
+    notifications: {
+      getAll:         ()               => notificationService.getAll(userId, orgId),
+      getUnreadCount: ()               => notificationService.getUnreadCount(userId, orgId),
+      markAsRead:     (notifId)        => notificationService.markAsRead(notifId),
+      markAllAsRead:  ()               => notificationService.markAllAsRead(userId, orgId),
+      /** userId + organizationId are injected automatically */
+      create: (notification) =>
+        notificationService.create({
+          ...notification,
+          userId,
+          organizationId: orgId,
+        }),
+      delete: (notifId) => notificationService.delete(notifId),
+    },
+
+    // ── Statement Imports ────────────────────────────────────────────────────
+    imports: {
+      previewFile:       (file) => importService.previewFile(orgId, file),
+      executeImport:     (uploadId, bankAccId, mapping, opt) =>
+        importService.executeImport(orgId, uploadId, bankAccId, mapping, opt),
+      commitParsedImport: (bankAccId, currency, fileName, rows, opt) =>
+        importService.commitParsedImport(orgId, bankAccId, currency, fileName, rows, opt),
+      getHistory:        () => importService.getHistory(orgId),
+    },
+
+    // ── Org Admin (current org management) ──────────────────────────────────
+    org: {
+      get:              ()                  => organizationService.getById(orgId),
+      update:           (updates)           => organizationService.update(orgId, updates),
+      delete:           ()                  => organizationService.delete(orgId),
+      getMembers:       ()                  => organizationService.getMembers(orgId),
+      addMember:        (uid, role)         => organizationService.addMember(orgId, uid, role),
+      updateMemberRole: (uid, newRole)      => organizationService.updateMemberRole(orgId, uid, newRole),
+      removeMember:     (uid)               => organizationService.removeMember(orgId, uid),
+    },
+
+    // ── Recurring / scheduled transactions ───────────────────────────────────
+    recurring: {
+      getAll:   ()                      => recurringTransactionService.getAll(orgId),
+      create:   (data)                  => recurringTransactionService.create(orgId, data),
+      update:   (id, updates)           => recurringTransactionService.update(id, updates, orgId || undefined),
+      delete:   (id)                    => recurringTransactionService.delete(id, orgId || undefined),
+      toggle:   (id)                    => recurringTransactionService.toggle(id, orgId || undefined),
+    },
+
+  // Re-create only when the active org or user changes
+  }), [orgId, userId]);
+}
+
+// ─── Convenience re-exports so callers can import types from one place ───────
+
+export type {
+  TransactionFilters,
+  PaginationParams,
+  ServiceResponse,
+  PaginatedResult,
+  DashboardSummary,
+  CashFlowSummary,
+  ProfitLossReport,
+  BalanceSheetReport,
+  DepartmentProfitability,
+  ProjectProfitability,
+  BulkOperationResult,
+  ImportPreview,
+  ImportResult,
+  ImportHistoryRecord,
+  ClassificationRule,
+  ClassificationResult,
+};

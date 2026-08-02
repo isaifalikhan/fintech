@@ -1,0 +1,388 @@
+import { motion } from 'motion/react';
+import { AXIOM } from '../../../styles/axiom-tokens';
+import { PageShell, PageHeader } from '../layout';
+import { 
+  DollarSign, Clock, Briefcase, TrendingUp,
+  AlertCircle, FileText, Bell, ChevronRight, Activity
+} from 'lucide-react';
+import { employeeService } from '@/services/employeeService';
+import { useService } from '@/hooks/useService';
+import { useAuth } from '@/contexts/AuthContext';
+
+function KPICard({ title, value, subtitle, icon: Icon, color, delay }: {
+  title: string; value: string; subtitle: string; icon: any; color: string; delay: number;
+}) {
+  const colorMap: Record<string, { bg: string; border: string; shadow: string; text: string; iconBg: string }> = {
+    blue: { bg: 'rgba(59, 130, 246, 0.1)', border: 'rgba(59, 130, 246, 0.2)', shadow: 'rgba(59, 130, 246, 0.3)', text: '#60a5fa', iconBg: 'linear-gradient(to bottom right, #3b82f6, #2563eb)' },
+    green: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.2)', shadow: 'rgba(16, 185, 129, 0.3)', text: '#34d399', iconBg: 'linear-gradient(to bottom right, #10b981, #059669)' },
+    purple: { bg: 'rgba(168, 85, 247, 0.1)', border: 'rgba(168, 85, 247, 0.2)', shadow: 'rgba(168, 85, 247, 0.3)', text: '#c084fc', iconBg: 'linear-gradient(to bottom right, #a855f7, #7c3aed)' },
+    amber: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.2)', shadow: 'rgba(245, 158, 11, 0.3)', text: '#fbbf24', iconBg: 'linear-gradient(to bottom right, #f59e0b, #d97706)' },
+    cyan: { bg: 'rgba(6, 182, 212, 0.1)', border: 'rgba(6, 182, 212, 0.2)', shadow: 'rgba(6, 182, 212, 0.3)', text: '#22d3ee', iconBg: 'linear-gradient(to bottom right, #06b6d4, #0891b2)' },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.5 }}
+      className="rounded-2xl p-6 relative overflow-hidden"
+      style={{
+        background: AXIOM.backgrounds.chartContainer,
+        border: `1px solid ${c.border}`,
+        boxShadow: `0 20px 60px -20px ${c.shadow}`,
+      }}
+    >
+      <div className="absolute top-0 right-0 w-32 h-32 pointer-events-none" style={{
+        background: `radial-gradient(circle at 100% 0%, ${c.bg}, transparent 70%)`
+      }} />
+      <div className="flex items-start justify-between relative z-10">
+        <div>
+          <p className="text-xs text-slate-400 font-mono mb-2">{title}</p>
+          <p className="text-3xl font-bold text-white mb-1">{value}</p>
+          <p className="text-sm font-mono" style={{ color: c.text }}>{subtitle}</p>
+        </div>
+        <div className="size-12 rounded-xl flex items-center justify-center" style={{
+          background: c.iconBg,
+          boxShadow: `0 10px 30px -10px ${c.shadow}`,
+        }}>
+          <Icon className="size-6 text-white" />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+export function EmployeeDashboard() {
+  const { user, currentOrganization } = useAuth();
+  const orgId = currentOrganization?.id ?? 'org-001';
+  const userId = user?.id ?? '';
+
+  const { data: dashData, loading, error } = useService(
+    () => employeeService.getDashboardSummary(orgId, userId),
+    [orgId, userId],
+    ['expenses', 'timesheets', 'payslips', 'announcements'],
+  );
+
+  const data = {
+    name: user?.name ?? 'there',
+    department: dashData?.department ?? 'Team',
+    position: dashData?.position ?? 'Member',
+    hoursThisWeek: dashData?.hoursThisWeek ?? 0,
+    hoursTarget: dashData?.hoursTarget ?? 40,
+    pendingExpenses: dashData?.pendingExpenses ?? 0,
+    pendingExpenseAmount: dashData?.pendingExpenseAmount ?? 0,
+    activeProjects: dashData?.activeProjects ?? 0,
+    completedTasks: dashData?.completedTasks ?? 0,
+    totalTasks: dashData?.totalTasks ?? 0,
+    salary: dashData?.salary ?? { gross: 0, net: 0, currency: 'USD' },
+    lastPayPeriod: dashData?.lastPayPeriod ?? '',
+    recentActivity: dashData?.recentActivity ?? [],
+    weeklyHours: dashData?.weeklyHours ?? [],
+    announcements: dashData?.announcements ?? [],
+  };
+  const hoursPercent = data.hoursTarget > 0 ? (data.hoursThisWeek / data.hoursTarget) * 100 : 0;
+  const taskPercent = data.totalTasks > 0 ? (data.completedTasks / data.totalTasks) * 100 : 0;
+  const hoursRemaining = Math.max(0, data.hoursTarget - data.hoursThisWeek);
+  const hoursSubtitle =
+    data.hoursThisWeek >= data.hoursTarget && data.hoursTarget > 0
+      ? 'Target met for this week'
+      : `${hoursRemaining.toFixed(1)}h remaining`;
+
+  if (error && !dashData) {
+    return (
+      <PageShell className="space-y-4">
+        <PageHeader title="Dashboard" />
+        <p className="text-amber-200 font-mono text-sm border border-amber-500/30 rounded-xl px-4 py-3" style={{ background: 'rgba(245, 158, 11, 0.08)' }}>
+          {error}
+        </p>
+      </PageShell>
+    );
+  }
+
+  if (loading && !dashData) {
+    return (
+      <PageShell>
+        <div className="animate-pulse space-y-3">
+          <div className="h-10 bg-white/10 rounded-lg w-2/3 max-w-md" />
+          <div className="h-4 bg-white/5 rounded w-1/3" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="h-32 rounded-2xl bg-white/5 animate-pulse" />
+          ))}
+        </div>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell>
+      {error && (
+        <p className="text-amber-200 font-mono text-sm border border-amber-500/30 rounded-xl px-4 py-3" style={{ background: 'rgba(245, 158, 11, 0.08)' }}>
+          {error}
+        </p>
+      )}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <PageHeader
+          title={<>Welcome back, {data.name}</>}
+          description={`${data.position} — ${data.department}`}
+        />
+      </motion.div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <KPICard title="HOURS THIS WEEK" value={`${data.hoursThisWeek}h`} subtitle={hoursSubtitle} icon={Clock} color="blue" delay={0.1} />
+        <KPICard title="PENDING EXPENSES" value={`$${data.pendingExpenseAmount.toFixed(2)}`} subtitle={`${data.pendingExpenses} claims pending`} icon={DollarSign} color="amber" delay={0.15} />
+        <KPICard
+          title="ACTIVE PROJECTS"
+          value={`${data.activeProjects}`}
+          subtitle={data.totalTasks > 0 ? `${data.completedTasks}/${data.totalTasks} tasks done` : 'From your logged time'}
+          icon={Briefcase}
+          color="purple"
+          delay={0.2}
+        />
+        <KPICard title="LAST NET PAY" value={`$${data.salary.net.toLocaleString()}`} subtitle={data.lastPayPeriod || 'Latest'} icon={TrendingUp} color="green" delay={0.25} />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Weekly Hours Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="xl:col-span-2 rounded-2xl p-6"
+          style={{
+            ...AXIOM.containers.chartBlue,
+            borderRadius: '1rem',
+          }}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className={AXIOM.typography.sectionTitle}>Weekly Hours</h3>
+              <p className={AXIOM.typography.monoMuted}>This week (Mon–Sun)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="px-3 py-1.5 rounded-lg text-xs font-mono" style={{
+                background: 'rgba(59, 130, 246, 0.15)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                color: '#60a5fa',
+              }}>
+                {hoursPercent.toFixed(0)}% of target
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-3 h-48">
+            {(data.weeklyHours.length ? data.weeklyHours : [
+              { day: 'Mon', hours: 0 }, { day: 'Tue', hours: 0 }, { day: 'Wed', hours: 0 },
+              { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }, { day: 'Sat', hours: 0 }, { day: 'Sun', hours: 0 },
+            ]).map((day, i) => {
+              const maxH = 8.5;
+              const pct = (day.hours / maxH) * 100;
+              return (
+                <motion.div
+                  key={day.day}
+                  initial={{ height: 0 }}
+                  animate={{ height: `${pct}%` }}
+                  transition={{ delay: 0.4 + i * 0.1, duration: 0.6, ease: 'easeOut' }}
+                  className="flex-1 relative group"
+                >
+                  <div className="absolute inset-0 rounded-t-lg" style={{
+                    background: day.hours >= 8 
+                      ? 'linear-gradient(to top, rgba(59, 130, 246, 0.4), rgba(59, 130, 246, 0.7))' 
+                      : 'linear-gradient(to top, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.4))',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderBottom: 'none',
+                  }} />
+                  {/* Tooltip */}
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded text-xs text-white font-mono whitespace-nowrap" style={{
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                  }}>
+                    {day.hours}h
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+          <div className="flex gap-3 mt-3">
+            {(data.weeklyHours.length ? data.weeklyHours : [
+              { day: 'Mon', hours: 0 }, { day: 'Tue', hours: 0 }, { day: 'Wed', hours: 0 },
+              { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }, { day: 'Sat', hours: 0 }, { day: 'Sun', hours: 0 },
+            ]).map((day) => (
+              <div key={day.day} className="flex-1 text-center text-xs text-slate-400 font-mono">{day.day}</div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-400 font-mono">Weekly Progress</span>
+              <span className="text-xs text-blue-400 font-mono">{data.hoursThisWeek}h / {data.hoursTarget}h</span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0, 0, 0, 0.3)' }}>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(hoursPercent, 100)}%` }}
+                transition={{ delay: 0.5, duration: 0.8 }}
+                className="h-full rounded-full"
+                style={{ background: 'linear-gradient(to right, #3b82f6, #06b6d4)' }}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Announcements */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="rounded-2xl p-6"
+          style={{
+            ...AXIOM.containers.chartPurple,
+            borderRadius: '1rem',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-6">
+            <Bell className="size-5 text-purple-400" />
+            <h3 className="text-white font-bold">Announcements</h3>
+          </div>
+
+          <div className="space-y-3">
+            {data.announcements.length === 0 && (
+              <p className="text-sm text-slate-500 font-mono">No announcements right now.</p>
+            )}
+            {data.announcements.map((item, i) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 + i * 0.1 }}
+                className="p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-colors"
+                style={{
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: item.urgent ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(148, 163, 184, 0.1)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  {item.urgent && (
+                    <AlertCircle className="size-4 text-amber-400 mt-0.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{item.title}</p>
+                    <p className="text-xs text-slate-400 font-mono mt-1">{item.date}</p>
+                  </div>
+                  <ChevronRight className="size-4 text-slate-500 shrink-0" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {data.totalTasks > 0 && (
+            <div className="mt-6 p-4 rounded-lg" style={{
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(168, 85, 247, 0.2)',
+            }}>
+              <p className="text-xs text-slate-400 font-mono mb-3">TASK COMPLETION</p>
+              <div className="flex items-center gap-4">
+                <div className="relative size-16">
+                  <svg className="size-16 -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(148, 163, 184, 0.1)" strokeWidth="3" />
+                    <motion.circle
+                      cx="18" cy="18" r="15.5" fill="none"
+                      stroke="url(#taskGradDash)" strokeWidth="3"
+                      strokeDasharray={`${taskPercent} ${100 - taskPercent}`}
+                      strokeLinecap="round"
+                      initial={{ strokeDasharray: '0 100' }}
+                      animate={{ strokeDasharray: `${taskPercent} ${100 - taskPercent}` }}
+                      transition={{ delay: 0.6, duration: 1 }}
+                    />
+                    <defs>
+                      <linearGradient id="taskGradDash" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#a855f7" />
+                        <stop offset="100%" stopColor="#3b82f6" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-bold text-white">{taskPercent.toFixed(0)}%</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-white font-bold">{data.completedTasks}/{data.totalTasks}</p>
+                  <p className="text-xs text-slate-400 font-mono">Tasks completed</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Recent Activity */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="rounded-2xl p-6"
+        style={{
+          ...AXIOM.containers.list,
+          borderRadius: '1rem',
+        }}
+      >
+        <div className="flex items-center gap-2 mb-6">
+          <Activity className="size-5 text-blue-400" />
+          <h3 className="text-white font-bold">Recent Activity</h3>
+        </div>
+
+        <div className="space-y-3">
+          {data.recentActivity.length === 0 && (
+            <p className="text-sm text-slate-500 font-mono py-4">No recent activity yet.</p>
+          )}
+          {data.recentActivity.map((item, i) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 + i * 0.05 }}
+              className="flex items-center gap-4 p-4 rounded-lg hover:bg-white/5 transition-colors"
+              style={{
+                background: AXIOM.backgrounds.innerCard,
+                border: AXIOM.borders.default,
+              }}
+            >
+              <div className="size-10 rounded-lg flex items-center justify-center" style={{
+                background: item.type === 'expense' ? 'rgba(245, 158, 11, 0.15)' :
+                  item.type === 'timesheet' ? 'rgba(59, 130, 246, 0.15)' :
+                  item.type === 'project' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                border: `1px solid ${item.type === 'expense' ? 'rgba(245, 158, 11, 0.3)' :
+                  item.type === 'timesheet' ? 'rgba(59, 130, 246, 0.3)' :
+                  item.type === 'project' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+              }}>
+                {item.type === 'expense' && <DollarSign className="size-5 text-amber-400" />}
+                {item.type === 'timesheet' && <Clock className="size-5 text-blue-400" />}
+                {item.type === 'project' && <Briefcase className="size-5 text-purple-400" />}
+                {item.type === 'payslip' && <FileText className="size-5 text-green-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{item.text}</p>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">{item.time}</p>
+              </div>
+              {item.amount && (
+                <span className="text-sm font-mono text-amber-400">${item.amount.toFixed(2)}</span>
+              )}
+              <span className={`text-xs font-mono px-2 py-1 rounded ${
+                item.status === 'approved' ? 'text-green-400 bg-green-400/10 border border-green-400/20' :
+                item.status === 'pending' ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20' :
+                item.status === 'completed' ? 'text-blue-400 bg-blue-400/10 border border-blue-400/20' :
+                'text-slate-400 bg-slate-400/10 border border-slate-400/20'
+              }`}>
+                {item.status}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+    </PageShell>
+  );
+}
