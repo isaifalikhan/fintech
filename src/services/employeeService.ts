@@ -178,7 +178,7 @@ export const employeeService = {
       if (!ru.ok) {
         return { success: false, data: [], error: ru.error };
       }
-      return apiGet<EmployeeExpense[]>(`${ME(ru.orgId)}/expenses`);
+      return apiGet<EmployeeExpense[]>(`${ME(ru.orgId)}/expenses?userId=${encodeURIComponent(ru.userId)}`);
     }
 
     await simulateDelay();
@@ -221,6 +221,7 @@ export const employeeService = {
       const submittedAt =
         data.status === 'submitted' ? (data.submittedAt?.trim() || nowIso) : undefined;
       const body = {
+        userId: u,
         description: data.description.trim(),
         amount: data.amount,
         currency,
@@ -329,7 +330,7 @@ export const employeeService = {
       if (!ru.ok) {
         return { success: false, data: [], error: ru.error };
       }
-      return apiGet<EmployeePayslip[]>(`${ME(ru.orgId)}/payslips`);
+      return apiGet<EmployeePayslip[]>(`${ME(ru.orgId)}/payslips?userId=${encodeURIComponent(ru.userId)}`);
     }
 
     await simulateDelay();
@@ -348,7 +349,7 @@ export const employeeService = {
       if (!ru.ok) {
         return { success: false, data: [], error: ru.error };
       }
-      return apiGet<TimesheetEntry[]>(`${ME(ru.orgId)}/timesheets`);
+      return apiGet<TimesheetEntry[]>(`${ME(ru.orgId)}/timesheets?userId=${encodeURIComponent(ru.userId)}`);
     }
 
     await simulateDelay();
@@ -373,9 +374,9 @@ export const employeeService = {
     const { orgId: o, userId: u } = ru;
 
     if (isHttpBackendConfigured()) {
-      return apiPostJson<Omit<TimesheetEntry, 'id' | 'organizationId' | 'userId'>, TimesheetEntry>(
+      return apiPostJson<Omit<TimesheetEntry, 'id' | 'organizationId' | 'userId'> & { userId: string }, TimesheetEntry>(
         `${ME(o)}/timesheets`,
-        data,
+        { ...data, userId: u },
       );
     }
 
@@ -456,7 +457,7 @@ export const employeeService = {
       if (!ru.ok) {
         return { success: false, data: emptyEmployeeDashboardSummary(), error: ru.error };
       }
-      return apiGet<EmployeeDashboardSummary>(`${ME(ru.orgId)}/employee-dashboard`);
+      return apiGet<EmployeeDashboardSummary>(`${ME(ru.orgId)}/employee-dashboard?userId=${encodeURIComponent(ru.userId)}`);
     }
 
     await simulateDelay();
