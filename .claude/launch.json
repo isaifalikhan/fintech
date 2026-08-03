@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fintech-dev-full",
+      "runtimeExecutable": "C:\\Users\\Fame\\AppData\\Local\\pnpm\\pnpm.CMD",
+      "runtimeArgs": ["run", "dev:full"],
+      "port": 5173
+    }
+  ]
+}

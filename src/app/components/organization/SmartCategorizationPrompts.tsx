@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 interface LowConfidenceTransaction {
   id: string;

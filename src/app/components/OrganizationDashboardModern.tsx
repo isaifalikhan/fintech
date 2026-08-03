@@ -52,7 +52,7 @@ import {
   Bar,
   Legend
 } from 'recharts';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   Dialog,
   DialogContent,
