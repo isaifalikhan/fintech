@@ -258,7 +258,7 @@ export function AdminLoginPage({ onLogin }: AdminLoginPageProps) {
 
                   {/* Footer Note */}
                   <p className={`text-xs text-center ${theme === 'dark' ? 'text-slate-500' : 'text-slate-600'} font-mono`}>
-                    Password: <span className="text-cyan-400">demo</span>
+                    Demo account — click a name above to sign in instantly
                   </p>
                 </>
               )}

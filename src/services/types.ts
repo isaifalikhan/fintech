@@ -37,6 +37,13 @@ export interface User {
   avatar?: string;
   role: PlatformRole; // Platform-level role
   createdAt: string;
+  /**
+   * Server-only bcrypt hash. Must NEVER reach the client — every response that includes a User
+   * strips this via `server/lib/serialize.ts`'s `toPublicUser`/`toPublicUsers`. Optional so mock
+   * data and any code constructing a `User` without a hash still compiles; the server backfills
+   * it once via `server/lib/seedPasswords.ts`.
+   */
+  passwordHash?: string;
 }
 
 export interface OrganizationMember {

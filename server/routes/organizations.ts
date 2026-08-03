@@ -7,13 +7,15 @@ import { Router, type Request, type Response } from 'express';
 import type { Organization, OrganizationMember, OrgAiIntegrationSettings } from '../../src/services/types.js';
 import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
-
-/** In-memory only (parity with client `aiSettingsService` demo localStorage — not part of the bundle). */
-const aiSettingsByOrg = new Map<string, OrgAiIntegrationSettings>();
+import { requireOrgRole } from '../middleware/auth.js';
 
 function defaultAiSettings(): OrgAiIntegrationSettings {
   return { useCustomKey: false, providerName: '', modelName: 'gpt-4o-mini', apiKey: '' };
 }
+
+/** Owner/admin only — everything below is either a read (open to any member, checked by the
+ *  requireAuth + requireOrgMembership gate mounted in apiV1.ts) or a mutation gated here. */
+const ownerOrAdmin = requireOrgRole('owner', 'admin');
 
 export function createOrganizationRouter(): Router {
   const r = Router({ mergeParams: true });
@@ -24,7 +26,7 @@ export function createOrganizationRouter(): Router {
     ok(res, org);
   });
 
-  r.patch('/', (req: Request, res: Response) => {
+  r.patch('/', ownerOrAdmin, (req: Request, res: Response) => {
     const idx = store.organizations.findIndex(o => o.id === req.params.organizationId);
     if (idx === -1) return notFound(res, 'Organization');
     store.organizations[idx] = { ...store.organizations[idx], ...(req.body as Partial<Organization>) };
@@ -32,7 +34,7 @@ export function createOrganizationRouter(): Router {
     ok(res, store.organizations[idx], 'Organization updated');
   });
 
-  r.delete('/', (req: Request, res: Response) => {
+  r.delete('/', ownerOrAdmin, (req: Request, res: Response) => {
     const id = req.params.organizationId;
     const idx = store.organizations.findIndex(o => o.id === id);
     if (idx === -1) return notFound(res, 'Organization');
@@ -57,7 +59,7 @@ export function createOrganizationRouter(): Router {
     ok(res, members);
   });
 
-  r.post('/members', (req: Request, res: Response) => {
+  r.post('/members', ownerOrAdmin, (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
     const { userId, role } = req.body as { userId: string; role: OrganizationMember['role'] };
     const existing = store.organizationMembers.find(m => m.userId === userId && m.organizationId === orgId);
@@ -68,7 +70,7 @@ export function createOrganizationRouter(): Router {
     created(res, member, 'Member added');
   });
 
-  r.patch('/members/:userId', (req: Request, res: Response) => {
+  r.patch('/members/:userId', ownerOrAdmin, (req: Request, res: Response) => {
     const { organizationId, userId } = req.params;
     const idx = store.organizationMembers.findIndex(m => m.userId === userId && m.organizationId === organizationId);
     if (idx === -1) return notFound(res, 'Member');
@@ -78,7 +80,7 @@ export function createOrganizationRouter(): Router {
     ok(res, store.organizationMembers[idx], 'Role updated');
   });
 
-  r.delete('/members/:userId', (req: Request, res: Response) => {
+  r.delete('/members/:userId', ownerOrAdmin, (req: Request, res: Response) => {
     const { organizationId, userId } = req.params;
     const idx = store.organizationMembers.findIndex(m => m.userId === userId && m.organizationId === organizationId);
     if (idx === -1) return notFound(res, 'Member');
@@ -103,14 +105,15 @@ export function createOrganizationRouter(): Router {
 
   r.get('/ai-settings', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    ok(res, aiSettingsByOrg.get(orgId) ?? null);
+    ok(res, store.aiSettings[orgId] ?? null);
   });
 
-  r.patch('/ai-settings', (req: Request, res: Response) => {
+  r.patch('/ai-settings', ownerOrAdmin, (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const prev = aiSettingsByOrg.get(orgId) ?? defaultAiSettings();
+    const prev = store.aiSettings[orgId] ?? defaultAiSettings();
     const next: OrgAiIntegrationSettings = { ...prev, ...(req.body as Partial<OrgAiIntegrationSettings>) };
-    aiSettingsByOrg.set(orgId, next);
+    store.aiSettings = { ...store.aiSettings, [orgId]: next };
+    store.persist();
     ok(res, next, 'AI connection settings saved.');
   });
 

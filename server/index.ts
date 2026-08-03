@@ -9,14 +9,18 @@
 
 import cors from 'cors';
 import express from 'express';
-import { store } from './lib/store.js';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { env } from './config/env.js';
+import { store, storeReady } from './lib/store.js';
 import { createApiV1Router } from './routes/apiV1.js';
-
-const PORT = Number(process.env.PORT ?? 3001);
+import { requireAuth, requirePlatformRole } from './middleware/auth.js';
 
 const app = express();
-app.use(cors({ origin: true }));
+app.use(helmet());
+app.use(cors({ origin: env.corsOrigin, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
+app.use(cookieParser());
 
 app.use('/api/v1', createApiV1Router());
 
@@ -28,15 +32,15 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-/** Whole-bundle read (used by the browser `dataStore` when `VITE_USE_LOCAL_DB=true`). */
-app.get('/api/bundle', (_req, res) => {
+/** Whole-bundle read/write — legacy sync path for the browser `dataStore` when
+ *  `VITE_USE_LOCAL_DB=true`. Restricted to platform staff: it exposes/replaces every
+ *  organization's data in one shot, which no single-org user or employee should be able to do. */
+app.get('/api/bundle', requireAuth, requirePlatformRole('platform_admin', 'platform_manager'), (_req, res) => {
   const { schemaVersion, payload } = store.toBundle();
   res.json({ schemaVersion, payload });
 });
 
-/** Whole-bundle write (browser `dataStore` debounced sync). Shares the same in-memory store
- *  as `/api/v1`, so writes from either surface are immediately visible to the other. */
-app.put('/api/bundle', (req, res) => {
+app.put('/api/bundle', requireAuth, requirePlatformRole('platform_admin', 'platform_manager'), (req, res) => {
   const body = req.body as { schemaVersion?: unknown; payload?: unknown };
   if (
     body == null ||
@@ -51,6 +55,8 @@ app.put('/api/bundle', (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`[finance-os] API http://localhost:${PORT} — SQLite bundle + /api/v1 REST (§1-§19)`);
+await storeReady;
+
+app.listen(env.port, () => {
+  console.log(`[finance-os] API http://localhost:${env.port} — SQLite bundle + /api/v1 REST (§1-§19)`);
 });

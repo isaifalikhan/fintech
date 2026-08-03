@@ -7,7 +7,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Notification } from '../../src/services/types.js';
 import { store } from '../lib/store.js';
-import { ok, created } from '../lib/http.js';
+import { ok, created, fail } from '../lib/http.js';
+import { isPlatformUser } from '../middleware/auth.js';
 
 export function createUserOrgNotificationsRouter(): Router {
   const r = Router({ mergeParams: true });
@@ -50,24 +51,34 @@ export function createUserOrgNotificationsRouter(): Router {
   return r;
 }
 
+/**
+ * Mounted at `/notifications` — the URL carries no user/org id, so ownership has to be checked
+ * against the notification row itself (`requireAuth` alone, applied in apiV1.ts, only proves the
+ * caller is *someone*; without this check any logged-in user could mark/delete anyone else's
+ * notifications by guessing an id).
+ */
 export function createGlobalNotificationsRouter(): Router {
   const r = Router();
 
   r.patch('/:id/read', (req: Request, res: Response) => {
     const idx = store.notifications.findIndex(n => n.id === req.params.id);
-    if (idx !== -1) {
-      store.notifications[idx].isRead = true;
-      store.persist();
-    }
+    if (idx === -1) return ok(res, null);
+    const notif = store.notifications[idx];
+    const caller = req.authUser!;
+    if (notif.userId !== caller.id && !isPlatformUser(caller)) return fail(res, 403, 'Forbidden');
+    store.notifications[idx].isRead = true;
+    store.persist();
     ok(res, null);
   });
 
   r.delete('/:id', (req: Request, res: Response) => {
     const idx = store.notifications.findIndex(n => n.id === req.params.id);
-    if (idx !== -1) {
-      store.notifications.splice(idx, 1);
-      store.persist();
-    }
+    if (idx === -1) return ok(res, null);
+    const notif = store.notifications[idx];
+    const caller = req.authUser!;
+    if (notif.userId !== caller.id && !isPlatformUser(caller)) return fail(res, 403, 'Forbidden');
+    store.notifications.splice(idx, 1);
+    store.persist();
     ok(res, null);
   });
 

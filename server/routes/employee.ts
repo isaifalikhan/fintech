@@ -8,6 +8,18 @@ import type { EmployeeExpense, TimesheetEntry } from '../../src/services/types.j
 import { store } from '../lib/store.js';
 import { ok, created, fail } from '../lib/http.js';
 
+/**
+ * Every route here is a self-service endpoint for the logged-in employee (mounted under
+ * `/organizations/:organizationId/me`, already gated by requireAuth + requireOrgMembership in
+ * apiV1.ts). `userId` therefore always comes from `req.authUser`, never from a client-supplied
+ * query/body field — a client could otherwise pass any other employee's `userId` and read or
+ * mutate their expenses/timesheets/payslips. Platform staff (who bypass org-membership checks)
+ * don't have a personal "me" workspace in any org, so they're intentionally excluded here too.
+ */
+function callerId(req: Request): string {
+  return req.authUser!.id;
+}
+
 function mondayOfWeek(ref: Date): Date {
   const d = new Date(ref);
   const day = d.getDay();
@@ -79,8 +91,7 @@ export function createEmployeeMeRouter(): Router {
 
   r.get('/expenses', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const userId = String(req.query.userId ?? '');
-    if (!userId) return fail(res, 400, 'userId query required');
+    const userId = callerId(req);
     const rows = store.expenses.filter(e => e.organizationId === orgId && e.userId === userId);
     const sorted = [...rows].sort((a, b) => {
       const db = parseTs(b.submittedAt, b.date) - parseTs(a.submittedAt, a.date);
@@ -92,9 +103,8 @@ export function createEmployeeMeRouter(): Router {
 
   r.post('/expenses', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const body = req.body as ExpenseCreateInput & { userId: string };
-    const userId = body.userId;
-    if (!userId) return fail(res, 400, 'userId required');
+    const body = req.body as ExpenseCreateInput;
+    const userId = callerId(req);
 
     const check = validateExpenseInput(body);
     if (!check.ok) return fail(res, 400, check.error);
@@ -137,6 +147,9 @@ export function createEmployeeMeRouter(): Router {
   r.post('/expenses/:id/submit', (req: Request, res: Response) => {
     const exp = store.expenses.find(e => e.id === req.params.id);
     if (!exp) return fail(res, 404, 'Expense not found');
+    if (exp.organizationId !== req.params.organizationId || exp.userId !== callerId(req)) {
+      return fail(res, 403, 'Forbidden');
+    }
     if (exp.status === 'submitted') return ok(res, exp, 'Already submitted');
     if (exp.status !== 'draft') return fail(res, 400, 'Only draft expenses can be submitted for review');
     exp.status = 'submitted';
@@ -147,34 +160,36 @@ export function createEmployeeMeRouter(): Router {
 
   r.get('/payslips', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const userId = String(req.query.userId ?? '');
-    if (!userId) return fail(res, 400, 'userId query required');
+    const userId = callerId(req);
     ok(res, store.payslips.filter(p => p.organizationId === orgId && p.userId === userId));
   });
 
   r.get('/timesheets', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const userId = String(req.query.userId ?? '');
-    if (!userId) return fail(res, 400, 'userId query required');
+    const userId = callerId(req);
     ok(res, store.timesheets.filter(t => t.organizationId === orgId && t.userId === userId));
   });
 
   r.post('/timesheets', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const body = req.body as Omit<TimesheetEntry, 'id' | 'organizationId' | 'userId'> & { userId: string };
-    if (!body.userId) return fail(res, 400, 'userId required');
-    const entry: TimesheetEntry = { ...body, id: store.generateId('ts'), organizationId: orgId, userId: body.userId };
+    const body = req.body as Omit<TimesheetEntry, 'id' | 'organizationId' | 'userId'>;
+    const userId = callerId(req);
+    const entry: TimesheetEntry = { ...body, id: store.generateId('ts'), organizationId: orgId, userId };
     store.timesheets.unshift(entry);
     store.persist();
     created(res, entry);
   });
 
   r.post('/timesheets/submit-week', (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const userId = callerId(req);
     const { ids } = req.body as { ids: string[] };
     let changed = false;
-    ids.forEach(id => {
+    (ids ?? []).forEach(id => {
       const entry = store.timesheets.find(t => t.id === id);
-      if (entry && entry.status === 'draft') {
+      // Only touch draft entries that belong to the caller in this org — otherwise a client
+      // could pass another employee's timesheet id and submit it on their behalf.
+      if (entry && entry.status === 'draft' && entry.organizationId === orgId && entry.userId === userId) {
         entry.status = 'submitted';
         changed = true;
       }
@@ -185,8 +200,7 @@ export function createEmployeeMeRouter(): Router {
 
   r.get('/employee-dashboard', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const userId = String(req.query.userId ?? '');
-    if (!userId) return fail(res, 400, 'userId query required');
+    const userId = callerId(req);
 
     const expenses = store.expenses.filter(e => e.userId === userId && e.organizationId === orgId);
     const timesheets = store.timesheets.filter(t => t.userId === userId && t.organizationId === orgId);

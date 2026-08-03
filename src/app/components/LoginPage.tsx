@@ -303,7 +303,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                 {/* Footer Note */}
                 <p className="text-xs text-center text-slate-500 font-mono">
-                  Password: <span className="text-purple-400">demo</span>
+                  Demo account — click a name above to sign in instantly
                 </p>
               </CardContent>
             </Card>

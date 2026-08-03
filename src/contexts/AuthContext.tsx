@@ -4,9 +4,12 @@ import { authService, organizationService } from '@/services';
 import type { AuthSession } from '@/services';
 import { logUnexpectedError } from '@/lib/diagnostics';
 import { isSupabaseConfigured } from '@/lib/supabaseClient';
+import { isHttpBackendConfigured } from '@/lib/apiClient';
 import { hydrateDataStoreFromSupabase } from '@/services/dataStore';
 
-// Token storage key
+// Mock-mode-only token storage key. When talking to the real HTTP backend, the session lives in
+// an httpOnly cookie the server sets on login — it's never readable from JS, so nothing is
+// stored here in that mode (see restoreSession/login/logout below).
 const TOKEN_KEY = 'finance_os_token';
 
 interface AuthContextType {
@@ -88,24 +91,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // ── Session restore on mount ───────────────────────────────────
   useEffect(() => {
     const restoreSession = async () => {
-      if (isSupabaseConfigured()) {
+      // Real backend (Supabase or the local HTTP API): the session lives server-side (Supabase
+      // session / httpOnly cookie), so restore is just "ask the server who I am" — no token to
+      // manage client-side at all.
+      if (isSupabaseConfigured() || isHttpBackendConfigured()) {
         try {
           const response = await authService.getSession('');
           if (response.success && response.data) {
             await applySession(response.data);
-            localStorage.setItem(TOKEN_KEY, response.data.token);
-          } else {
-            localStorage.removeItem(TOKEN_KEY);
           }
         } catch (e) {
-          logUnexpectedError('AuthContext.restoreSession.supabase', e);
-          localStorage.removeItem(TOKEN_KEY);
+          logUnexpectedError('AuthContext.restoreSession', e);
         } finally {
           setIsLoading(false);
         }
         return;
       }
 
+      // Mock mode only: no server to hold a session, so a token is kept in localStorage purely
+      // to remember "who was logged in" across a page refresh in the browser-only demo.
       const token = localStorage.getItem(TOKEN_KEY);
       if (!token) {
         setIsLoading(false);
@@ -138,7 +142,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (!response.success) {
         throw new Error(response.error || 'Login failed');
       }
-      localStorage.setItem(TOKEN_KEY, response.data.token);
+      // Mock mode only — real backends never expose the session token to client JS (Supabase
+      // manages its own storage; the local API sets an httpOnly cookie the browser can't read).
+      if (!isSupabaseConfigured() && !isHttpBackendConfigured()) {
+        localStorage.setItem(TOKEN_KEY, response.data.token);
+      }
       await applySession(response.data);
       await hydrateDataStoreFromSupabase();
     } finally {
@@ -147,7 +155,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
-    // Fire-and-forget the service call (keeps interface synchronous)
+    // Fire-and-forget the service call (keeps interface synchronous) — for the real backend this
+    // deletes the server-side session and clears the httpOnly cookie.
     authService.logout();
     localStorage.removeItem(TOKEN_KEY);
     setUser(null);
