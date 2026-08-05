@@ -348,7 +348,7 @@ export function CashFlowForecast() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Burn Rate</p>
               <p className="text-2xl font-bold text-cyan-400">
-                {formatCurrency(burnRate, 'PKR')}
+                {formatCurrency(burnRateDisplay, 'PKR')}
               </p>
               <p className="text-xs text-slate-400 mt-1">per day</p>
             </div>

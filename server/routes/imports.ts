@@ -11,7 +11,7 @@ import { store } from '../lib/store.js';
 import { ok, fail } from '../lib/http.js';
 import { classifyTransaction, type ClassificationRule } from '../../src/lib/classificationEngine.js';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 1024 } });
 
 interface ImportedRow {
   date: string;

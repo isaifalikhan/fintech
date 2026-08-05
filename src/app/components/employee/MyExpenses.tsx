@@ -54,7 +54,7 @@ const EXPENSE_CATEGORIES = [
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD'];
 
 /** Keeps receipts small enough for local demo persistence (data URL in store). */
-const MAX_RECEIPT_FILE_BYTES = 600 * 1024;
+const MAX_RECEIPT_FILE_BYTES = 1024 * 1024 * 1024;
 
 const EMPTY_FORM_BASE: Omit<ExpenseFormData, 'date'> = {
   description: '',
@@ -254,7 +254,7 @@ export function MyExpenses() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_RECEIPT_FILE_BYTES) {
-      setFormError(`Receipt must be ${Math.round(MAX_RECEIPT_FILE_BYTES / 1024)} KB or smaller (image).`);
+      setFormError(`Receipt must be ${Math.round(MAX_RECEIPT_FILE_BYTES / (1024 * 1024 * 1024))} GB or smaller (image).`);
       e.target.value = '';
       return;
     }
@@ -665,7 +665,7 @@ export function MyExpenses() {
                     type="button"
                     onClick={() => receiptInputRef.current?.click()}
                     disabled={isMutating}
-                    title="Attach an image of your receipt (max 600 KB)"
+                    title="Attach an image of your receipt (max 1 GB)"
                     className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm disabled:opacity-50 transition-all"
                     style={AXIOM.buttons.outline}
                   >
@@ -690,7 +690,7 @@ export function MyExpenses() {
                   )}
                 </div>
                 <p className="text-[10px] text-slate-500 font-mono">
-                  Images only (JPEG, PNG, GIF, WebP), up to 600 KB — stored on this device for the demo.
+                  Images only (JPEG, PNG, GIF, WebP), up to 1 GB — stored on this device for the demo.
                 </p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <button

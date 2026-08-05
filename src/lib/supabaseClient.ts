@@ -70,6 +70,17 @@ export function isSupabaseConfigured(): boolean {
   return url.length > 0 && key.length > 0;
 }
 
+/**
+ * True when Supabase is configured AND selected as the active data-sync backend
+ * (`VITE_USE_SUPABASE_DATA=true`) — i.e. `dataStore`'s single-row `finance_os_app_bundle`
+ * sync (see `services/dataStore.ts` / `services/supabaseBundle.ts`) is the source of truth.
+ * Services check this to skip the local HTTP API and use the (Supabase-synced) `dataStore`
+ * instead, since the two backends keep independent sessions and can't be mixed per-request.
+ */
+export function isSupabaseDataConfigured(): boolean {
+  return import.meta.env.VITE_USE_SUPABASE_DATA === 'true' && isSupabaseConfigured();
+}
+
 /** Persist URL + anon key in the browser (used when env vars are not set). */
 export function saveSupabaseConfigToStorage(url: string, anonKey: string): void {
   if (typeof localStorage === 'undefined') return;

@@ -6,6 +6,7 @@
 
 import type { ServiceResponse } from '@/services/types';
 import { logApiFailure } from '@/lib/diagnostics';
+import { isSupabaseDataConfigured } from '@/lib/supabaseClient';
 
 /** Primary env: set in `.env.local`. Falls back to `VITE_LOCAL_API_BASE` for existing setups. */
 export function getApiBaseUrl(): string {
@@ -14,8 +15,15 @@ export function getApiBaseUrl(): string {
   return primary || legacy || '';
 }
 
-/** True when a non-empty API base is configured — safe to route service calls through HTTP. */
+/**
+ * True when a non-empty API base is configured — safe to route service calls through HTTP.
+ * Returns false whenever Supabase is the active data backend (`isSupabaseDataConfigured()`):
+ * the local API and Supabase keep independent sessions, so a service can't call one while the
+ * user is authenticated against the other — every service falls back to the (Supabase-synced)
+ * `dataStore` branch instead in that case.
+ */
 export function isHttpBackendConfigured(): boolean {
+  if (isSupabaseDataConfigured()) return false;
   return getApiBaseUrl().length > 0;
 }
 

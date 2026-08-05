@@ -201,7 +201,7 @@ function AppRoutes() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['owner', 'admin', 'viewer']}>
             <OrganizationWorkspace />
           </ProtectedRoute>
         }

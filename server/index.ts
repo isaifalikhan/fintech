@@ -19,7 +19,7 @@ import { requireAuth, requirePlatformRole } from './middleware/auth.js';
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '1gb' }));
 app.use(cookieParser());
 
 app.use('/api/v1', createApiV1Router());

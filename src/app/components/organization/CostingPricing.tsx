@@ -5,8 +5,9 @@ import { Calculator, TrendingUp, Users, DollarSign, AlertCircle, Zap, Plus, Tras
 import { toast } from 'sonner';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { useOrgServices } from '@/hooks/useOrgServices';
-import { useServiceArray } from '@/hooks/useService';
+import { useService, useServiceArray } from '@/hooks/useService';
 import type { DepartmentProfitability } from '@/services/types';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 interface DepartmentRow {
   id: string;
@@ -52,8 +53,18 @@ export function CostingPricing() {
   const svc = useOrgServices();
 
   // Service-backed: department data for cost calculations
-  const { data: deptProfit } = useService(
+  const { data: deptProfit, loading: deptLoading, error: deptError } = useService(
     () => svc.departments.getProfitability(),
+    [svc.orgId]
+  );
+
+  const billableDepartments = useMemo(
+    () => (deptProfit ?? []).map(mapDepartmentProfitability).filter(isBillableDept),
+    [deptProfit],
+  );
+
+  const { data: projectProfit, loading: projectsLoading } = useServiceArray(
+    () => svc.projects.getProfitability(),
     [svc.orgId]
   );
 

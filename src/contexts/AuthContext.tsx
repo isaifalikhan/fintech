@@ -99,6 +99,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const response = await authService.getSession('');
           if (response.success && response.data) {
             await applySession(response.data);
+            // Fresh login hydrates dataStore from the Supabase bundle (see `login` below) — a
+            // page refresh restores the session the same way but skipped this until now, so every
+            // Supabase-backed service (dataStore branch) saw only the unsynced local seed data.
+            await hydrateDataStoreFromSupabase();
           }
         } catch (e) {
           logUnexpectedError('AuthContext.restoreSession', e);
@@ -197,7 +201,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getRedirectPath = (): string => {
     if (!user) return '/';
-    return authService.getRedirectPath(user);
+    // Use the already-resolved `userRole` (derived from the session's own membership at login/
+    // restore time) rather than authService.getRedirectPath's independent dataStore lookup —
+    // the two can disagree (e.g. dataStore not yet hydrated from Supabase), which previously
+    // caused an infinite redirect loop between /employee and /dashboard for employee accounts.
+    if (user.role === 'platform_admin' || user.role === 'platform_manager') return '/platform';
+    if (userRole === 'employee') return '/employee';
+    return '/dashboard';
   };
 
   const value: AuthContextType = {
