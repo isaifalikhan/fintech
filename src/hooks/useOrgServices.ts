@@ -285,6 +285,7 @@ export interface ClassificationServices {
   learnFromCorrection(transactionId: string, correctCategoryId: string): ReturnType<typeof classificationService.learnFromCorrection>;
   getRules(): ReturnType<typeof classificationService.getRules>;
   addRule(rule: Omit<ClassificationRule, 'id'>): ReturnType<typeof classificationService.addRule>;
+  updateRule(ruleId: string, updates: Partial<Omit<ClassificationRule, 'id'>>): ReturnType<typeof classificationService.updateRule>;
   deleteRule(ruleId: string): ReturnType<typeof classificationService.deleteRule>;
   getStats(): ReturnType<typeof classificationService.getStats>;
 }
@@ -479,6 +480,7 @@ export function useOrgServices(): OrgServices {
       learnFromCorrection:  (txnId, catId)            => classificationService.learnFromCorrection(orgId, txnId, catId),
       getRules:             ()                        => classificationService.getRules(orgId || undefined),
       addRule:              (rule)                    => classificationService.addRule(rule, orgId || undefined),
+      updateRule:           (ruleId, updates)         => classificationService.updateRule(ruleId, updates, orgId || undefined),
       deleteRule:           (ruleId)                  => classificationService.deleteRule(ruleId, orgId || undefined),
       getStats:             ()                        => classificationService.getStats(orgId),
     },

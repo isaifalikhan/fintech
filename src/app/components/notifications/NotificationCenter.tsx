@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useNotifications, type Notification } from '../../../contexts/NotificationContext';
 import { Button } from '../ui/button';
 import { 
@@ -169,6 +170,7 @@ function NotificationItem({
 }) {
   const Icon = CATEGORY_ICONS[notification.category];
   const typeStyle = TYPE_STYLES[notification.type];
+  const navigate = useNavigate();
 
   return (
     <motion.div
@@ -205,7 +207,7 @@ function NotificationItem({
                 onClick={() => {
                   onRead();
                   onClose();
-                  // TODO: Navigate to actionUrl
+                  if (notification.actionUrl) navigate(notification.actionUrl);
                 }}
                 className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
               >

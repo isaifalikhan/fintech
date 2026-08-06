@@ -67,9 +67,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['profit', 'intelligence', 'analysis', 'departments'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=profit-intelligence');
         setIsOpen(false);
-        // TODO: Navigate to profit intelligence view
       }
     },
     {
@@ -80,9 +79,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['cash', 'flow', 'forecast', 'prediction'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=forecast');
         setIsOpen(false);
-        // TODO: Navigate to cash flow view
       }
     },
     {
@@ -93,9 +91,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['what', 'if', 'simulator', 'scenarios', 'modeling'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=simulator');
         setIsOpen(false);
-        // TODO: Navigate to what-if view
       }
     },
     {
@@ -106,9 +103,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['transactions', 'ledger', 'history'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=transactions');
         setIsOpen(false);
-        // TODO: Navigate to transactions view
       }
     },
     {
@@ -119,9 +115,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['accounts', 'wallets', 'banks'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=accounts');
         setIsOpen(false);
-        // TODO: Navigate to accounts view
       }
     },
     {
@@ -132,9 +127,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['import', 'upload', 'statements', 'csv'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=import');
         setIsOpen(false);
-        // TODO: Navigate to import view
       }
     },
     {
@@ -145,9 +139,8 @@ export function CommandPalette() {
       category: 'navigation',
       keywords: ['settings', 'preferences', 'config'],
       action: () => {
-        navigate('/dashboard');
+        navigate('/dashboard?view=settings');
         setIsOpen(false);
-        // TODO: Navigate to settings view
       }
     },
     // Quick Actions
@@ -159,8 +152,8 @@ export function CommandPalette() {
       category: 'actions',
       keywords: ['add', 'create', 'new', 'transaction'],
       action: () => {
+        navigate('/dashboard?view=quick-add');
         setIsOpen(false);
-        // TODO: Open quick add modal
       }
     },
     {
@@ -171,8 +164,8 @@ export function CommandPalette() {
       category: 'actions',
       keywords: ['import', 'upload', 'statement'],
       action: () => {
+        navigate('/dashboard?view=import');
         setIsOpen(false);
-        // TODO: Open import modal
       }
     },
     {
@@ -183,8 +176,8 @@ export function CommandPalette() {
       category: 'actions',
       keywords: ['categorize', 'ai', 'learn', 'review'],
       action: () => {
+        navigate('/dashboard?view=logic');
         setIsOpen(false);
-        // TODO: Navigate to categorization view
       }
     }
   ], [navigate]);

@@ -220,6 +220,61 @@ export const organizationService = {
   },
 
   /**
+   * Invite someone by email. When the HTTP backend is configured, the server uses the Supabase
+   * Admin API (service-role key, server-only) to actually send a real invite email and create the
+   * account — the browser's anon key can never do that. Without the HTTP backend, this falls back
+   * to a local-only mock member (find-or-create a mock user by email) with no email sent.
+   */
+  async inviteMember(
+    organizationId: string,
+    email: string,
+    role: OrganizationMember['role'],
+    name?: string,
+  ): Promise<ServiceResponse<OrganizationMember>> {
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<{ email: string; name?: string; role: OrganizationMember['role'] }, OrganizationMember>(
+        `/organizations/${encodeURIComponent(organizationId)}/members/invite`,
+        { email, name, role },
+      );
+    }
+
+    await simulateDelay(200);
+    const trimmedEmail = email.trim().toLowerCase();
+    let user = dataStore.users.find(u => u.email.toLowerCase() === trimmedEmail);
+    if (!user) {
+      user = {
+        id: generateId('user'),
+        email: trimmedEmail,
+        name: name?.trim() || trimmedEmail,
+        role: 'organization_user',
+        createdAt: new Date().toISOString(),
+      };
+      dataStore.users.push(user);
+    }
+
+    const existing = dataStore.organizationMembers.find(
+      m => m.userId === user!.id && m.organizationId === organizationId
+    );
+    if (existing) {
+      return { success: false, data: existing, error: 'That person is already a member of this organization' };
+    }
+
+    const member: OrganizationMember = {
+      userId: user.id,
+      organizationId,
+      role,
+      joinedAt: new Date().toISOString(),
+    };
+    dataStore.organizationMembers.push(member);
+    dataStore.notify('organizationMembers');
+    return {
+      success: true,
+      data: member,
+      message: 'Member added (no HTTP backend configured, so no invite email was sent)',
+    };
+  },
+
+  /**
    * Update member role
    * TODO: Replace with PATCH /api/organizations/:orgId/members/:userId
    */

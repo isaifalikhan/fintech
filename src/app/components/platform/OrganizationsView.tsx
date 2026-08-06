@@ -8,18 +8,53 @@ import { organizationService } from '@/services/organizationService';
 import { useService } from '@/hooks/useService';
 import type { Organization } from '@/services/types';
 import { Search, Plus, Building2, Users, FileText, Settings, Eye, ChevronRight, Globe, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type EnrichedOrg = Organization & PlatformOrgMeta;
 
 export function OrganizationsView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [newOrgAdminEmail, setNewOrgAdminEmail] = useState('');
+  const [newOrgPlan, setNewOrgPlan] = useState('Basic (Trial)');
+  const [creatingOrg, setCreatingOrg] = useState(false);
 
   // Fetch all orgs from the service layer (platform admin sees all)
-  const { data: orgResult, loading: orgsLoading } = useService(
+  const { data: orgResult, loading: orgsLoading, refetch: refetchOrgs } = useService(
     () => organizationService.getAll({ page: 1, pageSize: 100 }),
     []
   );
+
+  const handleCreateOrg = async () => {
+    const name = newOrgName.trim();
+    if (!name) {
+      toast.error('Enter an organization name.');
+      return;
+    }
+    if (newOrgAdminEmail.trim() && !/^\S+@\S+\.\S+$/.test(newOrgAdminEmail.trim())) {
+      toast.error('Enter a valid admin email, or leave it blank.');
+      return;
+    }
+    setCreatingOrg(true);
+    const res = await organizationService.create({
+      name,
+      currency: 'PKR',
+      fiscalYearStart: '01-01',
+      settings: { theme: 'dark', notifications: true },
+    });
+    setCreatingOrg(false);
+    if (!res.success) {
+      toast.error(res.error || 'Could not create organization.');
+      return;
+    }
+    toast.success(`"${name}" created on the ${newOrgPlan} plan.`);
+    setShowCreateForm(false);
+    setNewOrgName('');
+    setNewOrgAdminEmail('');
+    setNewOrgPlan('Basic (Trial)');
+    await refetchOrgs();
+  };
 
   // Fetch platform-level metadata overlay from platformService
   const { data: orgMetaMap, loading: metaLoading } = useService(
@@ -116,32 +151,51 @@ export function OrganizationsView() {
             New Organization
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {['Organization Name', 'Admin Email', 'Plan'].map((label) => (
-              <div key={label} className="space-y-1">
-                <label className="text-xs text-slate-400 font-mono">{label}</label>
-                {label === 'Plan' ? (
-                  <select className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm" style={{
-                    background: AXIOM.inputs.background,
-                    border: AXIOM.inputs.border,
-                  }}>
-                    <option>Basic (Trial)</option>
-                    <option>Professional</option>
-                    <option>Enterprise</option>
-                  </select>
-                ) : (
-                  <input
-                    type={label.includes('Email') ? 'email' : 'text'}
-                    placeholder={label === 'Admin Email' ? 'admin@acme.com' : 'Acme Corporation'}
-                    className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
-                    style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
-                  />
-                )}
-              </div>
-            ))}
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Organization Name</label>
+              <input
+                type="text"
+                value={newOrgName}
+                onChange={(e) => setNewOrgName(e.target.value)}
+                placeholder="Acme Corporation"
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Admin Email</label>
+              <input
+                type="email"
+                value={newOrgAdminEmail}
+                onChange={(e) => setNewOrgAdminEmail(e.target.value)}
+                placeholder="admin@acme.com"
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Plan</label>
+              <select
+                value={newOrgPlan}
+                onChange={(e) => setNewOrgPlan(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              >
+                <option>Basic (Trial)</option>
+                <option>Professional</option>
+                <option>Enterprise</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <button className="flex items-center gap-2 px-6 py-2 rounded-lg text-white text-sm font-medium" style={AXIOM.buttons.success}>
-              Create & Send Invite
+            <button
+              onClick={() => void handleCreateOrg()}
+              disabled={creatingOrg}
+              className="flex items-center gap-2 px-6 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.success}
+            >
+              {creatingOrg ? <Loader2 className="size-4 animate-spin" /> : null}
+              Create Organization
             </button>
             <button onClick={() => setShowCreateForm(false)} className="px-4 py-2 rounded-lg text-slate-400 text-sm" style={AXIOM.buttons.outline}>
               Cancel

@@ -50,4 +50,10 @@ export const env = {
   cookieSecure: process.env.COOKIE_SECURE === 'true' || isProd,
   cookieDomain: process.env.COOKIE_DOMAIN?.trim() || undefined,
   port: Number(process.env.PORT ?? 3001),
+  // Server-only — never prefix with VITE_ (that would bundle it into client JS). Used to call the
+  // Supabase Admin API (create/invite real auth users, resolve legacy_id -> real UUID) for
+  // features the anon-key browser client structurally cannot do. Optional: those endpoints report
+  // a clear 501 when unset instead of the server failing to boot.
+  supabaseUrl: process.env.SUPABASE_URL?.trim() || '',
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '',
 };

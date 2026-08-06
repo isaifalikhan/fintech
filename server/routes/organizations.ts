@@ -4,10 +4,11 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import type { Organization, OrganizationMember, OrgAiIntegrationSettings } from '../../src/services/types.js';
+import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User } from '../../src/services/types.js';
 import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
 import { requireOrgRole } from '../middleware/auth.js';
+import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
 
 function defaultAiSettings(): OrgAiIntegrationSettings {
   return { useCustomKey: false, providerName: '', modelName: 'gpt-4o-mini', apiKey: '' };
@@ -70,14 +71,91 @@ export function createOrganizationRouter(): Router {
     created(res, member, 'Member added');
   });
 
-  r.patch('/members/:userId', ownerOrAdmin, (req: Request, res: Response) => {
+  r.patch('/members/:userId', ownerOrAdmin, async (req: Request, res: Response) => {
     const { organizationId, userId } = req.params;
     const idx = store.organizationMembers.findIndex(m => m.userId === userId && m.organizationId === organizationId);
     if (idx === -1) return notFound(res, 'Member');
     const { role } = req.body as { role: OrganizationMember['role'] };
     store.organizationMembers[idx] = { ...store.organizationMembers[idx], role };
     store.persist();
+
+    // Best-effort: mirror the role change to the real `organization_members` table. The mock
+    // userId isn't the row's real user_id (that's a Supabase Auth UUID) — resolve it via the
+    // `legacy_id` stamped in that user's auth metadata at invite time. Never blocks the response.
+    if (isSupabaseAdminConfigured()) {
+      void (async () => {
+        try {
+          const realUserId = await findAuthUserIdByLegacyId(userId);
+          if (!realUserId) return;
+          const sb = getSupabaseAdminClient();
+          const { error } = await sb!
+            .from('organization_members')
+            .update({ role })
+            .eq('organization_id', organizationId)
+            .eq('user_id', realUserId);
+          if (error) console.error('[members] Supabase role-sync failed', error);
+        } catch (e) {
+          console.error('[members] Supabase role-sync threw', e);
+        }
+      })();
+    }
+
     ok(res, store.organizationMembers[idx], 'Role updated');
+  });
+
+  r.post('/members/invite', ownerOrAdmin, async (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const { email, name, role } = req.body as { email: string; name?: string; role: OrganizationMember['role'] };
+    const trimmedEmail = email?.trim().toLowerCase();
+    if (!trimmedEmail) return fail(res, 400, 'Email is required');
+
+    let user = store.users.find(u => u.email.toLowerCase() === trimmedEmail);
+    if (!user) {
+      user = {
+        id: `user-${Date.now()}`,
+        email: trimmedEmail,
+        name: name?.trim() || trimmedEmail,
+        role: 'organization_user',
+        createdAt: new Date().toISOString(),
+      } as User;
+      store.users.push(user);
+    }
+
+    const existing = store.organizationMembers.find(m => m.userId === user!.id && m.organizationId === orgId);
+    if (existing) return fail(res, 409, 'That person is already a member of this organization');
+
+    const member: OrganizationMember = { userId: user.id, organizationId: orgId, role, joinedAt: new Date().toISOString() };
+    store.organizationMembers.push(member);
+    store.persist();
+
+    let inviteEmailSent = false;
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const sb = getSupabaseAdminClient()!;
+        const { data, error } = await sb.auth.admin.inviteUserByEmail(trimmedEmail, {
+          data: { legacy_id: user.id, name: user.name },
+        });
+        if (error) {
+          console.error('[members] Supabase inviteUserByEmail failed', error);
+        } else if (data.user) {
+          inviteEmailSent = true;
+          const { error: insertErr } = await sb
+            .from('organization_members')
+            .insert({ organization_id: orgId, user_id: data.user.id, role });
+          if (insertErr) console.error('[members] failed to insert real organization_members row', insertErr);
+        }
+      } catch (e) {
+        console.error('[members] Supabase admin invite threw', e);
+      }
+    }
+
+    created(
+      res,
+      member,
+      inviteEmailSent
+        ? `Invite email sent to ${trimmedEmail}`
+        : `Member added. ${isSupabaseAdminConfigured() ? 'Invite email could not be sent — check server logs.' : 'Supabase admin invite is not configured on this server, so no email was sent.'}`,
+    );
   });
 
   r.delete('/members/:userId', ownerOrAdmin, (req: Request, res: Response) => {

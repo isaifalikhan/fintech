@@ -89,6 +89,13 @@ export function createClassificationRouter(): Router {
     created(res, rule, 'Rule added');
   });
 
+  r.patch('/rules/:ruleId', (req: Request, res: Response) => {
+    const idx = classificationRules.findIndex(rule => rule.id === req.params.ruleId);
+    if (idx === -1) return notFound(res, 'Rule');
+    classificationRules[idx] = { ...classificationRules[idx], ...(req.body as Partial<ClassificationRule>) };
+    ok(res, classificationRules[idx], 'Rule updated');
+  });
+
   r.delete('/rules/:ruleId', (req: Request, res: Response) => {
     classificationRules = classificationRules.filter(rule => rule.id !== req.params.ruleId);
     ok(res, null, 'Rule deleted');

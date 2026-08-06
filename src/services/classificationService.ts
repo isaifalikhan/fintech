@@ -205,6 +205,28 @@ export const classificationService = {
     return { success: true, data: newRule, message: 'Rule added' };
   },
 
+  async updateRule(
+    ruleId: string,
+    updates: Partial<Omit<ClassificationRule, 'id'>>,
+    organizationId?: string,
+  ): Promise<ServiceResponse<ClassificationRule>> {
+    if (isHttpBackendConfigured()) {
+      const err = requireOrg<ClassificationRule>(organizationId ?? '');
+      if (err) return err;
+      return apiRequest<ClassificationRule>(`${CLS(organizationId!)}/rules/${encodeURIComponent(ruleId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    }
+
+    await simulateDelay(150);
+    const idx = classificationRules.findIndex(r => r.id === ruleId);
+    if (idx === -1) return { success: false, data: null as any, error: 'Rule not found' };
+    classificationRules[idx] = { ...classificationRules[idx], ...updates };
+    dataStore.notify('classification-rules');
+    return { success: true, data: classificationRules[idx], message: 'Rule updated' };
+  },
+
   async deleteRule(ruleId: string, organizationId?: string): Promise<ServiceResponse<null>> {
     if (isHttpBackendConfigured()) {
       const err = requireOrg<null>(organizationId ?? '');

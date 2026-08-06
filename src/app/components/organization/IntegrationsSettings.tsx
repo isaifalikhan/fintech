@@ -27,6 +27,7 @@ import {
 } from '@/services/integrationConnectionsService';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { toast } from 'sonner';
+import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
 
 interface Integration {
   id: string;
@@ -145,6 +146,7 @@ function toPersistMap(integrations: Integration[]): Record<string, IntegrationCo
 
 export function IntegrationsSettings() {
   const { orgId, isReady } = useOrgServices();
+  const goToOrgView = useOrgWorkspaceNav();
 
   const [useCustomAiKey, setUseCustomAiKey] = useState(false);
   const [aiProviderName, setAiProviderName] = useState('');
@@ -740,7 +742,7 @@ export function IntegrationsSettings() {
                       whileTap={{ scale: 0.95 }}
                       className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
                       style={AXIOM.buttons.secondary}
-                      onClick={() => toast.info('Manual import feature coming soon')}
+                      onClick={() => goToOrgView?.('import')}
                     >
                       <Download className="size-4" />
                       Manual

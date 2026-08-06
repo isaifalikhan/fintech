@@ -1016,7 +1016,7 @@ export function AccountsWallets() {
                       border: '1px solid rgba(168, 85, 247, 0.5)',
                       color: '#ffffff',
                     }}
-                    onClick={() => toast.info('Transaction list from this account is coming soon.')}
+                    onClick={() => goToOrgView?.('transactions')}
                   >
                     <Eye className="size-4" />
                     View transactions

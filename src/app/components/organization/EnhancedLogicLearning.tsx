@@ -44,6 +44,7 @@ export function EnhancedLogicLearning() {
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
   const [newRulePattern, setNewRulePattern] = useState('');
   const [newRuleCategoryId, setNewRuleCategoryId] = useState('');
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [expandedCorrectionTxnId, setExpandedCorrectionTxnId] = useState<string | null>(null);
   const [correctionCategoryId, setCorrectionCategoryId] = useState('');
 
@@ -83,6 +84,10 @@ export function EnhancedLogicLearning() {
   );
 
   const addRuleMut = useMutation((rule: Omit<ClassificationRule, 'id'>) => svc.classification.addRule(rule));
+
+  const updateRuleMut = useMutation((input: { id: string; updates: Partial<Omit<ClassificationRule, 'id'>> }) =>
+    svc.classification.updateRule(input.id, input.updates),
+  );
 
   const deleteRuleMut = useMutation((ruleId: string) => svc.classification.deleteRule(ruleId));
 
@@ -165,21 +170,31 @@ export function EnhancedLogicLearning() {
       toast.error('Choose a category.');
       return;
     }
-    const res = await addRuleMut.execute({
-      pattern,
-      categoryId: newRuleCategoryId,
-      confidence: 100,
-      matchCount: 0,
-      createdFrom: 'user',
-    });
+    const res = editingRuleId
+      ? await updateRuleMut.execute({ id: editingRuleId, updates: { pattern, categoryId: newRuleCategoryId } })
+      : await addRuleMut.execute({
+          pattern,
+          categoryId: newRuleCategoryId,
+          confidence: 100,
+          matchCount: 0,
+          createdFrom: 'user',
+        });
     if (res.success) {
-      toast.success(res.message || 'Rule added.');
+      toast.success(res.message || (editingRuleId ? 'Rule updated.' : 'Rule added.'));
       setRuleDialogOpen(false);
       setNewRulePattern('');
       setNewRuleCategoryId('');
+      setEditingRuleId(null);
     } else {
-      toast.error(res.error || 'Could not add rule.');
+      toast.error(res.error || 'Could not save rule.');
     }
+  };
+
+  const handleOpenEditRule = (rule: ClassificationRule) => {
+    setEditingRuleId(rule.id);
+    setNewRulePattern(rule.pattern);
+    setNewRuleCategoryId(rule.categoryId);
+    setRuleDialogOpen(true);
   };
 
   const handleDeleteRule = async (ruleId: string) => {
@@ -723,6 +738,8 @@ export function EnhancedLogicLearning() {
           <div className="flex justify-end">
             <Button
               onClick={() => {
+                setEditingRuleId(null);
+                setNewRulePattern('');
                 setNewRuleCategoryId(categories[0]?.id ?? '');
                 setRuleDialogOpen(true);
               }}
@@ -733,10 +750,16 @@ export function EnhancedLogicLearning() {
             </Button>
           </div>
 
-          <Dialog open={ruleDialogOpen} onOpenChange={setRuleDialogOpen}>
+          <Dialog
+            open={ruleDialogOpen}
+            onOpenChange={(open) => {
+              setRuleDialogOpen(open);
+              if (!open) setEditingRuleId(null);
+            }}
+          >
             <DialogContent className="border-[#2a2a3e] bg-[#0a0a0f] text-white sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>New classification rule</DialogTitle>
+                <DialogTitle>{editingRuleId ? 'Edit classification rule' : 'New classification rule'}</DialogTitle>
                 <DialogDescription className="text-gray-400">
                   If a transaction description contains this text, classify it to the category you pick.
                 </DialogDescription>
@@ -771,8 +794,8 @@ export function EnhancedLogicLearning() {
                 <Button variant="ghost" onClick={() => setRuleDialogOpen(false)} className="text-gray-400">
                   Cancel
                 </Button>
-                <Button onClick={handleCreateRule} disabled={addRuleMut.loading}>
-                  {addRuleMut.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save rule'}
+                <Button onClick={handleCreateRule} disabled={addRuleMut.loading || updateRuleMut.loading}>
+                  {(addRuleMut.loading || updateRuleMut.loading) ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save rule'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -822,9 +845,9 @@ export function EnhancedLogicLearning() {
                       </span>
                       <button
                         type="button"
-                        className="p-2 hover:bg-blue-500/10 rounded-lg transition-colors opacity-50 cursor-not-allowed"
-                        title="Editing rules is coming soon"
-                        disabled
+                        className="p-2 hover:bg-blue-500/10 rounded-lg transition-colors"
+                        title="Edit rule"
+                        onClick={() => handleOpenEditRule(rule)}
                       >
                         <Edit className="w-4 h-4 text-blue-400" />
                       </button>

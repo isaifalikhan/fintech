@@ -34,6 +34,16 @@ import { useServiceArray, useMutation } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/formatters';
 import type { OrganizationMember, User, UserRole } from '@/services/types';
+import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { Loader2 } from 'lucide-react';
 
 type TeamView = 'members' | 'roles' | 'activity' | 'invitations';
 type MemberRole = 'org_admin' | 'team_member' | 'accountant' | 'viewer';
@@ -175,6 +185,7 @@ function memberRoleToUserRole(memberRole: MemberRole, previousOrgRole: UserRole)
 export function TeamPermissions() {
   const { user, currentOrganization, switchOrganization } = useAuth();
   const orgId = currentOrganization?.id || 'org-001';
+  const goToOrgView = useOrgWorkspaceNav();
 
   const {
     data: orgMemberRows,
@@ -192,10 +203,19 @@ export function TeamPermissions() {
       organizationService.updateMemberRole(orgId, input.userId, input.newRole),
   );
 
+  const inviteMutation = useMutation(
+    (input: { email: string; name: string; role: UserRole }) =>
+      organizationService.inviteMember(orgId, input.email, input.role, input.name),
+  );
+
   const [activeView, setActiveView] = React.useState<TeamView>('members');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [filterRole, setFilterRole] = React.useState<string>('all');
   const [updatingMemberId, setUpdatingMemberId] = React.useState<string | null>(null);
+  const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState('');
+  const [inviteName, setInviteName] = React.useState('');
+  const [inviteRole, setInviteRole] = React.useState<MemberRole>('team_member');
 
   const teamMembers = React.useMemo(
     () => orgMemberRows.map(mapOrgMemberRowToTeamMember).filter((m): m is TeamMember => m != null),
@@ -230,7 +250,27 @@ export function TeamPermissions() {
       setUpdatingMemberId(null);
     }
   };
-  
+
+  const handleInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) {
+      toast.error('Enter an email address.');
+      return;
+    }
+    const orgRole = memberRoleToUserRole(inviteRole, 'viewer');
+    const res = await inviteMutation.execute({ email, name: inviteName.trim(), role: orgRole });
+    if (res.success) {
+      toast.success(res.message ?? 'Member invited');
+      setInviteDialogOpen(false);
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole('team_member');
+      await refetchMembers();
+    } else {
+      toast.error(res.error ?? 'Could not invite member');
+    }
+  };
+
   const activeMembers = teamMembers.filter(m => m.status === 'active').length;
   const pendingMembers = teamMembers.filter(m => m.status === 'pending').length;
   const totalPermissions = allPermissions.length;
@@ -333,7 +373,7 @@ export function TeamPermissions() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => toast.success('Bulk actions opened')}
+              onClick={() => goToOrgView?.('settings')}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={AXIOM.buttons.secondary}
             >
@@ -343,7 +383,7 @@ export function TeamPermissions() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => toast.success('Invite member modal opened')}
+              onClick={() => setInviteDialogOpen(true)}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={{
                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.4), rgba(59, 130, 246, 0.4))',
@@ -920,7 +960,7 @@ export function TeamPermissions() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => toast.success('Invite sent')}
+              onClick={() => setInviteDialogOpen(true)}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={{
                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.4), rgba(59, 130, 246, 0.4))',
@@ -997,6 +1037,74 @@ export function TeamPermissions() {
           </div>
         </motion.div>
       )}
+
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite a team member</DialogTitle>
+            <DialogDescription>
+              They'll be added to this organization and, if the server has invite emails
+              configured, sent a real sign-in invite.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">Email</label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="jane@company.com"
+                className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">Name (optional)</label>
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Jane Doe"
+                className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">Role</label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as MemberRole)}
+                className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              >
+                <option value="org_admin">Org Admin</option>
+                <option value="accountant">Accountant</option>
+                <option value="team_member">Team Member</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setInviteDialogOpen(false)}
+              className="px-4 py-2 rounded-lg text-slate-400 text-sm"
+              style={AXIOM.buttons.outline}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleInvite()}
+              disabled={inviteMutation.loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.success}
+            >
+              {inviteMutation.loading ? <Loader2 className="size-4 animate-spin" /> : null}
+              Send Invite
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

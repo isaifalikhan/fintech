@@ -61,7 +61,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           type: 'warning',
           category: 'cashflow',
           actionLabel: 'View Forecast',
-          actionUrl: '/dashboard'
+          actionUrl: '/dashboard?view=forecast'
         },
         {
           title: '12 Transactions Need Review',
@@ -69,7 +69,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           type: 'info',
           category: 'categorization',
           actionLabel: 'Review Now',
-          actionUrl: '/dashboard'
+          actionUrl: '/dashboard?view=transactions'
         },
         {
           title: 'Profit Margin Increased',
@@ -77,7 +77,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           type: 'success',
           category: 'insight',
           actionLabel: 'See Details',
-          actionUrl: '/dashboard'
+          actionUrl: '/dashboard?view=profit-intelligence'
         },
         {
           title: 'Invoice Payment Overdue',
@@ -85,7 +85,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           type: 'error',
           category: 'reminder',
           actionLabel: 'Send Reminder',
-          actionUrl: '/dashboard'
+          actionUrl: '/dashboard?view=reports'
         }
       ];
 

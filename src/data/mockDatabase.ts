@@ -225,6 +225,69 @@ export const mockAccounts: Account[] = [
     isActive: true,
     createdAt: '2024-01-15T10:00:00Z',
   },
+  // Minimal chart-of-accounts entries backing the default categories below — without at least
+  // one income + a few expense accounts, `Category.accountId` (required) has nothing to link to
+  // and every transaction is permanently "Uncategorised" with no in-app way to add a category.
+  {
+    id: 'acc-org001-revenue',
+    organizationId: 'org-001',
+    code: '4000',
+    name: 'Client Revenue',
+    type: 'income',
+    subtype: 'revenue',
+    currency: 'PKR',
+    balance: 0,
+    isActive: true,
+    createdAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'acc-org001-cogs-contractors',
+    organizationId: 'org-001',
+    code: '5000',
+    name: 'Contractor & Freelancer Costs',
+    type: 'expense',
+    subtype: 'cogs',
+    currency: 'PKR',
+    balance: 0,
+    isActive: true,
+    createdAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'acc-org001-opex-software',
+    organizationId: 'org-001',
+    code: '6000',
+    name: 'Software & Subscriptions',
+    type: 'expense',
+    subtype: 'operating_expense',
+    currency: 'PKR',
+    balance: 0,
+    isActive: true,
+    createdAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'acc-org001-opex-rent',
+    organizationId: 'org-001',
+    code: '6010',
+    name: 'Rent & Utilities',
+    type: 'expense',
+    subtype: 'operating_expense',
+    currency: 'PKR',
+    balance: 0,
+    isActive: true,
+    createdAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'acc-org001-opex-payroll',
+    organizationId: 'org-001',
+    code: '6020',
+    name: 'Payroll & Benefits',
+    type: 'expense',
+    subtype: 'operating_expense',
+    currency: 'PKR',
+    balance: 0,
+    isActive: true,
+    createdAt: '2024-01-15T10:00:00Z',
+  },
 ];
 
 export const mockBankAccounts: BankAccount[] = [
@@ -241,7 +304,61 @@ export const mockBankAccounts: BankAccount[] = [
     usage: 'business',
   },
 ];
-export const mockCategories: Category[] = [];
+// Minimal default categories so new transactions have something to classify against and
+// Logic & Learning's "Create Custom Rule" dropdown isn't empty. There is no in-app "Add Category"
+// flow (only patterns/rules are user-editable), so this seed IS the category list.
+export const mockCategories: Category[] = [
+  {
+    id: 'cat-org001-revenue',
+    organizationId: 'org-001',
+    name: 'Client Revenue',
+    type: 'income',
+    accountId: 'acc-org001-revenue',
+    color: '#10b981',
+    icon: '💰',
+    patterns: ['client payment', 'invoice', 'payment received'],
+  },
+  {
+    id: 'cat-org001-contractors',
+    organizationId: 'org-001',
+    name: 'Contractor & Freelancer Costs',
+    type: 'expense',
+    accountId: 'acc-org001-cogs-contractors',
+    color: '#f59e0b',
+    icon: '🧑‍💻',
+    patterns: ['freelancer', 'contractor'],
+  },
+  {
+    id: 'cat-org001-software',
+    organizationId: 'org-001',
+    name: 'Software & Subscriptions',
+    type: 'expense',
+    accountId: 'acc-org001-opex-software',
+    color: '#6366f1',
+    icon: '💻',
+    patterns: ['software', 'subscription', 'saas', 'adobe', 'aws'],
+  },
+  {
+    id: 'cat-org001-rent',
+    organizationId: 'org-001',
+    name: 'Rent & Utilities',
+    type: 'expense',
+    accountId: 'acc-org001-opex-rent',
+    color: '#ef4444',
+    icon: '🏢',
+    patterns: ['rent', 'electricity', 'utility', 'utilities'],
+  },
+  {
+    id: 'cat-org001-payroll',
+    organizationId: 'org-001',
+    name: 'Payroll & Benefits',
+    type: 'expense',
+    accountId: 'acc-org001-opex-payroll',
+    color: '#8b5cf6',
+    icon: '👥',
+    patterns: ['salary', 'payroll', 'wages'],
+  },
+];
 /** One default cost center so project CRUD can attach `departmentId` on a clean seed (projects stay empty). */
 export const mockDepartments: Department[] = [
   {
