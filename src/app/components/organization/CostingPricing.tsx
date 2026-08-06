@@ -479,7 +479,7 @@ export function CostingPricing() {
                   }}
                 >
                   <p className="text-sm text-amber-400 font-medium">
-                    Recommendation: consider increasing the quote to at least {formatCurrency(quoteAnalysis.cost * 1.25, 'PKR')} for a 25% margin.
+                    Recommendation: consider increasing the quote to at least {formatCurrency(quoteAnalysis.cost / 0.75, 'PKR')} for a 25% margin.
                   </p>
                 </div>
               )}

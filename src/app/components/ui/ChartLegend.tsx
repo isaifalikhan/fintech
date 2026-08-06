@@ -55,7 +55,7 @@ export function ChartLegend({
           </div>
 
           {/* Value if provided */}
-          {item.value && (
+          {item.value != null && (
             <span className="text-xs opacity-70 ml-2">
               {item.value}
             </span>
@@ -125,7 +125,7 @@ export function AdvancedChartLegend({
             </div>
 
             {/* Value */}
-            {item.value && (
+            {item.value != null && (
               <span
                 className="text-lg font-bold"
                 style={{ color: item.active ? item.color : '#64748b' }}

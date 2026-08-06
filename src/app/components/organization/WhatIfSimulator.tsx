@@ -71,25 +71,25 @@ export function WhatIfSimulator() {
   // Calculate scenario impact
   const calculateImpact = (s: Scenario) => {
     // Revenue calculation
-    const revenueFromChange = baseMetrics.monthlyRevenue * (1 + s.revenueChange / 100);
+    const revenueFromChange = effectiveBase.monthlyRevenue * (1 + s.revenueChange / 100);
     const revenueFromPrice = revenueFromChange * (1 + s.priceIncrease / 100);
-    const revenueFromUtilization = revenueFromPrice * (s.utilizationRate / baseMetrics.utilizationRate);
+    const revenueFromUtilization = revenueFromPrice * (s.utilizationRate / effectiveBase.utilizationRate);
     const projectedRevenue = revenueFromUtilization;
 
     // Expense calculation
-    const baseExpense = baseMetrics.monthlyExpense * (1 + s.expenseChange / 100);
+    const baseExpense = effectiveBase.monthlyExpense * (1 + s.expenseChange / 100);
     const newHireCost = s.newHires * s.avgSalary;
     const projectedExpense = baseExpense + newHireCost;
 
     // Metrics
     const projectedProfit = projectedRevenue - projectedExpense;
-    const currentProfit = baseMetrics.monthlyRevenue - baseMetrics.monthlyExpense;
+    const currentProfit = effectiveBase.monthlyRevenue - effectiveBase.monthlyExpense;
     const profitChange = projectedProfit - currentProfit;
     const profitChangePercent = (profitChange / currentProfit) * 100;
     const margin = (projectedProfit / projectedRevenue) * 100;
 
     // Team metrics
-    const totalTeam = baseMetrics.currentTeam + s.newHires;
+    const totalTeam = effectiveBase.currentTeam + s.newHires;
     const revenuePerHead = projectedRevenue / totalTeam;
     const profitPerHead = projectedProfit / totalTeam;
 

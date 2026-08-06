@@ -159,8 +159,8 @@ export function LoansView() {
   const loansToPay = loans.filter(l => l.type === 'to_pay');
 
   // Calculations
-  const totalToReceive = loansToReceive.reduce((sum, loan) => sum + (loan.remainingBalance || loan.amount), 0);
-  const totalToPay = loansToPay.reduce((sum, loan) => sum + (loan.remainingBalance || loan.amount), 0);
+  const totalToReceive = loansToReceive.reduce((sum, loan) => sum + (loan.remainingBalance ?? loan.amount), 0);
+  const totalToPay = loansToPay.reduce((sum, loan) => sum + (loan.remainingBalance ?? loan.amount), 0);
   const netPosition = totalToReceive - totalToPay;
   const totalInterestReceivable = loansToReceive.reduce((sum, loan) => sum + (loan.totalInterest || 0), 0);
   const totalInterestPayable = loansToPay.reduce((sum, loan) => sum + (loan.totalInterest || 0), 0);
@@ -561,11 +561,11 @@ export function LoansView() {
                         {loan.status.replace('_', ' ')}
                       </span>
                     </div>
-                    <p className="text-2xl font-bold text-green-400 mb-2">{formatCurrency(loan.remainingBalance || loan.amount)}</p>
+                    <p className="text-2xl font-bold text-green-400 mb-2">{formatCurrency(loan.remainingBalance ?? loan.amount)}</p>
                     <p className="text-sm text-slate-400 mb-2">{loan.description}</p>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500">Due: {formatDate(loan.dueDate)}</span>
-                      {loan.interestRate && (
+                      {!!loan.interestRate && (
                         <span className="text-cyan-400">{loan.interestRate}% APR</span>
                       )}
                     </div>
@@ -604,7 +604,7 @@ export function LoansView() {
                         {loan.status.replace('_', ' ')}
                       </span>
                     </div>
-                    <p className="text-2xl font-bold text-red-400 mb-2">{formatCurrency(loan.remainingBalance || loan.amount)}</p>
+                    <p className="text-2xl font-bold text-red-400 mb-2">{formatCurrency(loan.remainingBalance ?? loan.amount)}</p>
                     <p className="text-sm text-slate-400 mb-2">{loan.description}</p>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500">Due: {formatDate(loan.dueDate)}</span>
@@ -697,7 +697,7 @@ export function LoansView() {
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 mb-1">Remaining Balance</p>
-                    <p className="text-lg font-bold text-green-400">{formatCurrency(loan.remainingBalance || loan.amount)}</p>
+                    <p className="text-lg font-bold text-green-400">{formatCurrency(loan.remainingBalance ?? loan.amount)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 mb-1">Interest Rate</p>
@@ -827,7 +827,7 @@ export function LoansView() {
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 mb-1">Remaining Balance</p>
-                    <p className="text-lg font-bold text-red-400">{formatCurrency(loan.remainingBalance || loan.amount)}</p>
+                    <p className="text-lg font-bold text-red-400">{formatCurrency(loan.remainingBalance ?? loan.amount)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500 mb-1">Interest Rate</p>
@@ -835,7 +835,7 @@ export function LoansView() {
                   </div>
                 </div>
 
-                {loan.installmentAmount && (
+                {!!loan.installmentAmount && (
                   <div className="p-4 rounded-xl mb-4" style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
                     <div className="grid grid-cols-3 gap-4">
                       <div>

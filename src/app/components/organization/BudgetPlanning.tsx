@@ -224,7 +224,7 @@ export function BudgetPlanning() {
   };
 
   const getPercentageUsed = (budget: Budget) => {
-    return (budget.spent / budget.amount) * 100;
+    return budget.amount > 0 ? (budget.spent / budget.amount) * 100 : 0;
   };
 
   const getVariance = (budget: Budget) => {

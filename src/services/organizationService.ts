@@ -8,8 +8,39 @@
 
 import { Organization, OrganizationMember, User } from '@/services/types';
 import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
+import { getSupabaseClient, isSupabaseDataConfigured } from '@/lib/supabaseClient';
+import { logUnexpectedError } from '@/lib/diagnostics';
 import { dataStore, generateId, simulateDelay } from './dataStore';
 import type { ServiceResponse, PaginatedResult, PaginationParams } from './types';
+
+/**
+ * The real `organizations` table (used by Supabase Auth session/login resolution — see
+ * supabaseAuth.ts's fetchMembershipAndOrg) is a separate copy of org data from the JSON bundle
+ * dataStore persists to. Without this, an org-name/currency/fiscal-year edit here would update the
+ * bundle (so most pages reflect it) but never reach the row session-restore reads on next login,
+ * so the header/sidebar would keep showing the old value forever. Requires the
+ * "organizations_update_member" RLS policy — see supabase/fix_org_update_policy.sql.
+ */
+function syncOrganizationToSupabaseTable(org: Organization): void {
+  if (!isSupabaseDataConfigured()) return;
+  const sb = getSupabaseClient();
+  if (!sb) return;
+  // supabase-js query builders are lazy "thenables" — the request is only actually sent once
+  // something calls `.then()`/awaits the builder. A bare `void builder` (no .then()) constructs
+  // the chain but never fires it, so the update silently never reaches the network at all.
+  sb.from('organizations')
+    .update({
+      name: org.name,
+      logo: org.logo,
+      currency: org.currency,
+      fiscal_year_start: org.fiscalYearStart,
+      settings: org.settings,
+    })
+    .eq('id', org.id)
+    .then(({ error }: { error: { message: string } | null }) => {
+      if (error) logUnexpectedError('organizationService.syncOrganizationToSupabaseTable', error);
+    });
+}
 
 function paginationQuery(params: PaginationParams = {}): string {
   const qs = new URLSearchParams();
@@ -101,6 +132,7 @@ export const organizationService = {
 
     dataStore.organizations[idx] = { ...dataStore.organizations[idx], ...updates };
     dataStore.notify('organizations');
+    syncOrganizationToSupabaseTable(dataStore.organizations[idx]);
     return { success: true, data: dataStore.organizations[idx], message: 'Organization updated' };
   },
 

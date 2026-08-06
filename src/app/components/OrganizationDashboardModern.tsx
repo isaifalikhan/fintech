@@ -146,10 +146,10 @@ export function OrganizationDashboard() {
         )
       : safeFinite(dashboardFallbackAnalytics.netWorth, 0);
 
-  const netWorth =
-    bankAccounts.length > 0
-      ? safeFinite(sumAccountsPkr, dashboardFallbackAnalytics.netWorth)
-      : netWorthFromSummary;
+  // Net worth is assets minus liabilities (cash + receivables − payables), never just the sum of
+  // bank balances — that's `totalBalance` above. Always use the full calc; `netWorthFromSummary`
+  // already falls back to dashboardFallbackAnalytics.netWorth when kpis isn't loaded yet.
+  const netWorth = netWorthFromSummary;
 
   const dataError = accountsError || kpisError || txnError;
   const dataLoading = accountsLoading || kpisLoading || txnLoading;

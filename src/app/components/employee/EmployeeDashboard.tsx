@@ -368,7 +368,7 @@ export function EmployeeDashboard() {
                 <p className="text-sm text-white truncate">{item.text}</p>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">{item.time}</p>
               </div>
-              {item.amount && (
+              {!!item.amount && (
                 <span className="text-sm font-mono text-amber-400">${item.amount.toFixed(2)}</span>
               )}
               <span className={`text-xs font-mono px-2 py-1 rounded ${

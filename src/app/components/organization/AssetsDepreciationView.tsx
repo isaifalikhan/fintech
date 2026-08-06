@@ -559,7 +559,7 @@ export function AssetsDepreciationView() {
             <div className="space-y-3">
               {categories.filter(c => c.id !== 'all').map((cat) => {
                 const count = assets.filter(a => a.category === cat.id).length;
-                const percentage = (count / assets.length) * 100;
+                const percentage = assets.length > 0 ? (count / assets.length) * 100 : 0;
                 return (
                   <div key={cat.id}>
                     <div className="flex items-center justify-between mb-2">

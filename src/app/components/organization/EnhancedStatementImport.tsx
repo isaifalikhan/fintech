@@ -1366,7 +1366,7 @@ export function EnhancedStatementImport({
                       >
                         {formatCurrency(txn.amount, resolvedImportCurrency)}
                       </p>
-                      {txn.confidence && (
+                      {!!txn.confidence && (
                         <p className="text-xs text-slate-400">
                           {txn.confidence}% confidence
                         </p>

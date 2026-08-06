@@ -65,7 +65,7 @@ export function TimelineChart({
                         <h4 className="text-white font-medium text-sm">{event.title}</h4>
                         <p className="text-slate-400 text-xs mt-1">{event.description}</p>
                       </div>
-                      {event.value && (
+                      {!!event.value && (
                         <span className={`font-semibold ${
                           event.type === 'payment' || event.type === 'client'
                             ? 'text-green-400'

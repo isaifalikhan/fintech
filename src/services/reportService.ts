@@ -13,6 +13,16 @@ import type { ServiceResponse, ProfitLossReport, DashboardSummary, CashFlowSumma
 const REP = (organizationId: string) =>
   `/organizations/${encodeURIComponent(organizationId)}/reports`;
 
+/** Whole months between the earliest and latest of the given ISO dates, floored at 1 so a burn
+ *  rate divisor never hits 0 (and never overstates burn for orgs with under a month of history). */
+function monthsSpannedByDates(dates: string[]): number {
+  const times = dates.map(d => new Date(d).getTime()).filter(t => !Number.isNaN(t));
+  if (times.length === 0) return 1;
+  const spanMs = Math.max(...times) - Math.min(...times);
+  const months = spanMs / (1000 * 60 * 60 * 24 * 30.44);
+  return Math.max(1, Math.round(months));
+}
+
 function requireOrg<T>(organizationId: string): ServiceResponse<T> | null {
   if (!organizationId.trim()) {
     return { success: false, data: null as unknown as T, error: 'organizationId required' };
@@ -273,7 +283,13 @@ export const reportService = {
     const currentCash = cashAccounts.reduce((s, a) => s + a.balance, 0);
 
     const txns = dataStore.transactions.filter(t => t.organizationId === organizationId);
-    const monthlyExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0) / 6;
+    const debitTxns = txns.filter(t => t.type === 'debit');
+    const totalDebits = debitTxns.reduce((s, t) => s + Math.abs(t.amount), 0);
+    // Average over the actual span of transaction history, not a hardcoded 6 months — dividing by
+    // a fixed window overstates burn rate for orgs with less history and understates it (masking a
+    // real cash crunch) for orgs with more.
+    const monthsOfHistory = monthsSpannedByDates(debitTxns.map(t => t.date));
+    const monthlyExpenses = totalDebits / monthsOfHistory;
     const burnRate = Math.round(monthlyExpenses);
     const runway = burnRate > 0 ? Math.round((currentCash / burnRate) * 10) / 10 : Infinity;
 

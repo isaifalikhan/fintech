@@ -336,6 +336,17 @@ export const importService = {
 
     dataStore.notify('transactions');
 
+    // "Update balance from a statement" (AccountsWallets.tsx) sends users here specifically to
+    // reconcile the account balance — importing must actually move it, in the account's own
+    // currency, or that promise is broken. Cross-currency imports (override at mapping step)
+    // are left alone since there's no FX conversion in this app.
+    const bankAccount = dataStore.bankAccounts.find(a => a.id === bankAccountId);
+    if (bankAccount && bankAccount.currency === currency) {
+      const netDelta = imported.reduce((s, t) => s + t.amount, 0);
+      bankAccount.balance += netDelta;
+      dataStore.notify('bankAccounts');
+    }
+
     const totalIncome = imported.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = imported
       .filter(t => t.type === 'debit')

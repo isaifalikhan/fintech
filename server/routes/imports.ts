@@ -177,6 +177,15 @@ export function createImportsRouter(): Router {
       store.transactions.unshift(newTxn);
       imported.push(newTxn);
     }
+
+    // Mirrors src/services/importService.ts — "Update balance from a statement" sends users
+    // here specifically to reconcile the account balance, so importing must actually move it.
+    const bankAccount = store.bankAccounts.find(a => a.id === bankAccountId);
+    if (bankAccount && bankAccount.currency === currency) {
+      const netDelta = imported.reduce((s, t) => s + t.amount, 0);
+      bankAccount.balance += netDelta;
+    }
+
     store.persist();
 
     const totalIncome = imported.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);

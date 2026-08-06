@@ -165,7 +165,15 @@ export function createReportsRouter(): Router {
     const currentCash = cashAccounts.reduce((s, a) => s + a.balance, 0);
 
     const txns = store.transactions.filter(t => t.organizationId === orgId);
-    const monthlyExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0) / 6;
+    const debitTxns = txns.filter(t => t.type === 'debit');
+    const totalDebits = debitTxns.reduce((s, t) => s + Math.abs(t.amount), 0);
+    // Average over the actual span of transaction history, not a hardcoded 6 months — mirrors the
+    // client-side mock calc in src/services/reportService.ts (must stay in sync with it).
+    const debitDates = debitTxns.map(t => new Date(t.date).getTime()).filter(t => !Number.isNaN(t));
+    const monthsOfHistory = debitDates.length === 0
+      ? 1
+      : Math.max(1, Math.round((Math.max(...debitDates) - Math.min(...debitDates)) / (1000 * 60 * 60 * 24 * 30.44)));
+    const monthlyExpenses = totalDebits / monthsOfHistory;
     const burnRate = Math.round(monthlyExpenses);
     const runway = burnRate > 0 ? Math.round((currentCash / burnRate) * 10) / 10 : Infinity;
 

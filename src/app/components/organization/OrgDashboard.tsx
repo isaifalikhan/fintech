@@ -920,10 +920,10 @@ export function OrgDashboard() {
         )
       : safeFinite(analytics.netWorth, 0);
 
-  const netWorthDisplay =
-    bankAccounts.length > 0
-      ? safeFinite(sumAccountsPkr, analytics.netWorth)
-      : netWorthFromSummary;
+  // Net worth is assets minus liabilities (cash + receivables − payables), never just the sum of
+  // bank balances — that's `totalBalance` above. Always use the full calc; `netWorthFromSummary`
+  // already falls back to `analytics.netWorth` when dashboardKPIs isn't loaded yet.
+  const netWorthDisplay = netWorthFromSummary;
 
   const cashOnHand = safeFinite(dashboardKPIs?.cashOnHand, analytics.cashInHand);
   const monthlyProfitDisplay = safeFinite(getProfitByPeriod(), analytics.monthlyProfit);

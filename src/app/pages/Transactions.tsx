@@ -232,7 +232,7 @@ export function Transactions() {
           <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20">
             {value}
           </span>
-          {row.confidence && row.confidence < 90 && (
+          {!!row.confidence && row.confidence < 90 && (
             <span className="text-xs text-slate-500">({row.confidence}%)</span>
           )}
         </div>
