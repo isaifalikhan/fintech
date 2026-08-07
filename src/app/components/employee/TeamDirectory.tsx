@@ -13,7 +13,7 @@ export function TeamDirectory() {
   const orgId = currentOrganization?.id || 'org-001';
 
   // Service-backed team data
-  const { data: svcTeam } = useService(
+  const { data: svcTeam, loading, error } = useService(
     () => employeeService.getTeamDirectory(orgId),
     [orgId]
   );
@@ -136,15 +136,24 @@ export function TeamDirectory() {
             </div>
 
             <div className="mt-4 pt-4 flex gap-2" style={{ borderTop: AXIOM.borders.default }}>
-              <button className="flex-1 px-3 py-2 rounded-lg text-xs font-mono text-blue-400 transition-all hover:bg-blue-400/10" style={{
-                background: 'rgba(59, 130, 246, 0.05)',
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-              }}>
+              <a
+                href={`mailto:${member.email}`}
+                className="flex-1 px-3 py-2 rounded-lg text-xs font-mono text-blue-400 transition-all hover:bg-blue-400/10 text-center"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.05)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                }}
+              >
                 <Mail className="size-3.5 inline mr-1.5" />Email
-              </button>
-              <button className="flex-1 px-3 py-2 rounded-lg text-xs font-mono text-slate-400 transition-all hover:bg-white/5" style={{
-                border: AXIOM.borders.default,
-              }}>
+              </a>
+              <button
+                disabled
+                title="No phone number on file for this member"
+                className="flex-1 px-3 py-2 rounded-lg text-xs font-mono text-slate-500 cursor-not-allowed opacity-50"
+                style={{
+                  border: AXIOM.borders.default,
+                }}
+              >
                 <Phone className="size-3.5 inline mr-1.5" />Call
               </button>
             </div>

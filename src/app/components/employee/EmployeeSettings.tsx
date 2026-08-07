@@ -5,10 +5,11 @@ import { authService } from '@/services/authService';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function EmployeeSettings() {
+  const { user } = useAuth();
   const sections = [
     { title: 'Profile Settings', icon: User, color: 'blue', items: [
-      { label: 'Full Name', value: 'Alex Chen', type: 'text' },
-      { label: 'Email', value: 'alex.chen@agency.com', type: 'text' },
+      { label: 'Full Name', value: user?.name ?? '', type: 'text' },
+      { label: 'Email', value: user?.email ?? '', type: 'text' },
       { label: 'Phone', value: '+1 555-0105', type: 'text' },
       { label: 'Department', value: 'Development', type: 'readonly' },
     ]},

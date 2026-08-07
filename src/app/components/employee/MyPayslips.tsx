@@ -1,10 +1,41 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { FileText, Download, Eye, DollarSign, TrendingUp, Calendar } from 'lucide-react';
 import { employeeService } from '@/services/employeeService';
 import { useService } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
+import type { EmployeePayslip } from '@/services/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+
+function downloadPayslip(p: EmployeePayslip, employeeName: string): void {
+  const lines = [
+    `Payslip — ${p.period}`,
+    `Employee: ${employeeName}`,
+    `Issue date: ${p.issueDate}`,
+    `Status: ${p.status}`,
+    '',
+    `Gross pay: ${p.currency} ${p.gross.toLocaleString()}`,
+    'Deductions:',
+    ...p.deductions.map(d => `  - ${d.name}: ${p.currency} ${d.amount.toLocaleString()}`),
+    `Net pay: ${p.currency} ${p.net.toLocaleString()}`,
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `payslip-${p.period.replace(/\s+/g, '-')}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export function MyPayslips() {
   const { user, currentOrganization } = useAuth();
@@ -15,6 +46,9 @@ export function MyPayslips() {
     () => employeeService.getPayslips(orgId, userId),
     [orgId, userId],
   );
+
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const viewingPayslip = (rows ?? []).find(p => p.id === viewingId) ?? null;
 
   const payslips = useMemo(() => {
     const list = rows ?? [];
@@ -142,10 +176,23 @@ export function MyPayslips() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button type="button" className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="View">
+                <button
+                  type="button"
+                  onClick={() => setViewingId(payslip.id)}
+                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  title="View"
+                >
                   <Eye className="size-4 text-blue-400" />
                 </button>
-                <button type="button" className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="Download">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const full = (rows ?? []).find(p => p.id === payslip.id);
+                    if (full) downloadPayslip(full, user?.name ?? 'Employee');
+                  }}
+                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                  title="Download"
+                >
                   <Download className="size-4 text-slate-400" />
                 </button>
               </div>
@@ -153,6 +200,35 @@ export function MyPayslips() {
           ))}
         </div>
       </motion.div>
+
+      <Dialog open={viewingPayslip != null} onOpenChange={(open) => { if (!open) setViewingId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{viewingPayslip?.period}</DialogTitle>
+            <DialogDescription>Issued {viewingPayslip?.issueDate} · {viewingPayslip?.status}</DialogDescription>
+          </DialogHeader>
+          {viewingPayslip && (
+            <div className="space-y-3 py-2 font-mono text-sm">
+              <div className="flex justify-between text-white">
+                <span>Gross pay</span>
+                <span>{viewingPayslip.currency} {viewingPayslip.gross.toLocaleString()}</span>
+              </div>
+              <div className="space-y-1 border-t border-white/10 pt-2">
+                {viewingPayslip.deductions.map((d) => (
+                  <div key={d.name} className="flex justify-between text-red-400">
+                    <span>{d.name}</span>
+                    <span>-{viewingPayslip.currency} {d.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t border-white/10 pt-2 font-bold text-green-400">
+                <span>Net pay</span>
+                <span>{viewingPayslip.currency} {viewingPayslip.net.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

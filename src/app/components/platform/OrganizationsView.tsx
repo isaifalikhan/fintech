@@ -9,6 +9,14 @@ import { useService } from '@/hooks/useService';
 import type { Organization } from '@/services/types';
 import { Search, Plus, Building2, Users, FileText, Settings, Eye, ChevronRight, Globe, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 
 type EnrichedOrg = Organization & PlatformOrgMeta;
 
@@ -53,6 +61,43 @@ export function OrganizationsView() {
     setNewOrgName('');
     setNewOrgAdminEmail('');
     setNewOrgPlan('Basic (Trial)');
+    await refetchOrgs();
+  };
+
+  const [viewingOrg, setViewingOrg] = useState<EnrichedOrg | null>(null);
+  const [managingOrg, setManagingOrg] = useState<EnrichedOrg | null>(null);
+  const [manageName, setManageName] = useState('');
+  const [manageCurrency, setManageCurrency] = useState('');
+  const [manageFiscalYearStart, setManageFiscalYearStart] = useState('');
+  const [savingManage, setSavingManage] = useState(false);
+
+  const openManage = (org: EnrichedOrg) => {
+    setManagingOrg(org);
+    setManageName(org.name);
+    setManageCurrency(org.currency);
+    setManageFiscalYearStart(org.fiscalYearStart);
+  };
+
+  const handleSaveManage = async () => {
+    if (!managingOrg) return;
+    const name = manageName.trim();
+    if (!name) {
+      toast.error('Organization name cannot be empty.');
+      return;
+    }
+    setSavingManage(true);
+    const res = await organizationService.update(managingOrg.id, {
+      name,
+      currency: manageCurrency.trim().toUpperCase(),
+      fiscalYearStart: manageFiscalYearStart,
+    });
+    setSavingManage(false);
+    if (!res.success) {
+      toast.error(res.error || 'Could not update organization.');
+      return;
+    }
+    toast.success('Organization updated.');
+    setManagingOrg(null);
     await refetchOrgs();
   };
 
@@ -299,10 +344,18 @@ export function OrganizationsView() {
 
               {/* Actions */}
               <div className="flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-mono transition-all" style={AXIOM.buttons.info}>
+                <button
+                  onClick={() => setViewingOrg(org)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-mono transition-all"
+                  style={AXIOM.buttons.info}
+                >
                   <Eye className="size-4" /> View Details
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-mono transition-all" style={AXIOM.buttons.outline}>
+                <button
+                  onClick={() => openManage(org)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-mono transition-all"
+                  style={AXIOM.buttons.outline}
+                >
                   <Settings className="size-4" /> Manage
                 </button>
               </div>
@@ -311,6 +364,91 @@ export function OrganizationsView() {
         })}
       </div>
       )}
+
+      {/* View Details */}
+      <Dialog open={viewingOrg != null} onOpenChange={(open) => { if (!open) setViewingOrg(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{viewingOrg?.name}</DialogTitle>
+            <DialogDescription>
+              Created {viewingOrg ? new Date(viewingOrg.createdAt).toLocaleDateString() : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {viewingOrg && (
+            <div className="space-y-3 py-2 text-sm font-mono">
+              <div className="flex justify-between"><span className="text-slate-400">Status</span><span className="text-white capitalize">{viewingOrg.status.replace('_', ' ')}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Plan</span><span className="text-white">{viewingOrg.plan}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Currency</span><span className="text-white">{viewingOrg.currency}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Fiscal year start</span><span className="text-white">{viewingOrg.fiscalYearStart}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Next invoice</span><span className="text-white">Rs {viewingOrg.billing.amount.toLocaleString()}</span></div>
+              <div className="border-t border-white/10 pt-3 space-y-2">
+                <div className="flex justify-between"><span className="text-slate-400">Users</span><span className="text-white">{viewingOrg.limits.usersUsed}/{viewingOrg.limits.users}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Statements</span><span className="text-white">{viewingOrg.limits.statementsUsed}/{viewingOrg.limits.statements}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Currencies</span><span className="text-white">{viewingOrg.limits.currenciesUsed}/{viewingOrg.limits.currencies}</span></div>
+              </div>
+              <div className="border-t border-white/10 pt-3 text-xs text-slate-500">Org ID: {viewingOrg.id}</div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage */}
+      <Dialog open={managingOrg != null} onOpenChange={(open) => { if (!open) setManagingOrg(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage {managingOrg?.name}</DialogTitle>
+            <DialogDescription>Edits save to this organization's real record.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Organization name</label>
+              <input
+                type="text"
+                value={manageName}
+                onChange={(e) => setManageName(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Currency</label>
+              <input
+                type="text"
+                value={manageCurrency}
+                onChange={(e) => setManageCurrency(e.target.value)}
+                maxLength={3}
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm uppercase"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Fiscal year start (MM-DD)</label>
+              <input
+                type="text"
+                value={manageFiscalYearStart}
+                onChange={(e) => setManageFiscalYearStart(e.target.value)}
+                placeholder="01-01"
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setManagingOrg(null)} className="px-4 py-2 rounded-lg text-slate-400 text-sm" style={AXIOM.buttons.outline}>
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleSaveManage()}
+              disabled={savingManage}
+              className="flex items-center gap-2 px-6 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.success}
+            >
+              {savingManage ? <Loader2 className="size-4 animate-spin" /> : null}
+              Save Changes
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
