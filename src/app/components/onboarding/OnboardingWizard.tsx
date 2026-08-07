@@ -66,27 +66,27 @@ export function OnboardingWizard() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-2xl"
         >
-          <Card className="bg-slate-900 border-white/10 shadow-2xl">
-            <CardContent className="p-8">
+          <Card className="bg-slate-900 border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <CardContent className="p-4 sm:p-8">
               {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center`}
+              <div className="flex items-center justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center shrink-0`}
                     style={{
                       boxShadow: '0 10px 30px -10px rgba(139, 92, 246, 0.6)',
                     }}
                   >
-                    <Icon className="w-6 h-6 text-white" />
+                    <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-slate-400">Step {currentStep + 1} of {steps.length}</p>
-                    <h2 className="text-xl font-bold text-white">{step.title}</h2>
+                    <h2 className="text-lg sm:text-xl font-bold text-white truncate">{step.title}</h2>
                   </div>
                 </div>
                 <button
                   onClick={skipOnboarding}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -99,7 +99,7 @@ export function OnboardingWizard() {
                   {steps.map((s, idx) => (
                     <div
                       key={s.id}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
+                      className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all shrink-0 ${
                         idx < currentStep
                           ? 'bg-green-500 text-white'
                           : idx === currentStep
@@ -127,27 +127,27 @@ export function OnboardingWizard() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                   variant="outline"
                   onClick={previousStep}
                   disabled={currentStep === 0}
-                  className="border-white/10 hover:bg-white/5 text-white"
+                  className="border-white/10 hover:bg-white/5 text-white order-3 sm:order-none w-full sm:w-auto"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back
                 </Button>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                   <Button
                     variant="outline"
                     onClick={skipOnboarding}
-                    className="border-white/10 hover:bg-white/5 text-slate-400"
+                    className="border-white/10 hover:bg-white/5 text-slate-400 flex-1 sm:flex-initial"
                   >
                     Skip Tour
                   </Button>
                   <Button
                     onClick={handleContinue}
-                    className={`bg-gradient-to-r ${colorClass} hover:opacity-90 text-white`}
+                    className={`bg-gradient-to-r ${colorClass} hover:opacity-90 text-white flex-1 sm:flex-initial`}
                   >
                     {currentStep === steps.length - 1 ? (
                       <>
@@ -193,7 +193,7 @@ function WelcomeStep() {
         </p>
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 bg-white/5 rounded-lg border border-white/10">
           <Brain className="w-8 h-8 text-blue-400 mb-2" />
           <h4 className="text-white font-medium mb-1">AI-Powered</h4>
@@ -283,7 +283,7 @@ function ImportStatementsStep() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
         <div className="text-center p-3 bg-white/5 rounded-lg">
           <p className="text-2xl font-bold text-white mb-1">1.</p>
           <p className="text-xs text-slate-400">Upload file</p>
@@ -378,7 +378,7 @@ function ExploreInsightsStep() {
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">You're all set! Here's what you can do now:</p>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg p-4">
           <TrendingUp className="w-8 h-8 text-purple-400 mb-3" />
           <h4 className="text-white font-medium mb-2">Profit Intelligence</h4>
