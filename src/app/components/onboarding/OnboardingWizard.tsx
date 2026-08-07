@@ -1,4 +1,6 @@
+import { useNavigate } from 'react-router';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -268,17 +270,44 @@ function ConnectBankStep() {
 }
 
 function ImportStatementsStep() {
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
+  const { skipOnboarding, completeStep, nextStep } = useOnboarding();
+
+  const goToRealImport = () => {
+    // This tour runs for anonymous first-time visitors too (mounted outside auth in App.tsx),
+    // and even for a real session `user` briefly reads null while it restores — only jump into
+    // the real (auth-gated) import page once we're CONFIRMED logged in, never on ambiguous/absent
+    // auth, or the route guard bounces them through login, which looks like a broken redirect.
+    if (!authLoading && user) {
+      skipOnboarding();
+      navigate('/dashboard?view=import');
+    } else {
+      completeStep('import-statements');
+      nextStep();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">Upload your first bank statement or CSV file to get started.</p>
-      
-      <div className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={goToRealImport}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') goToRealImport(); }}
+        className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+      >
         <Upload className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
         <h4 className="text-white font-medium mb-2">Drag & Drop Your Statement</h4>
         <p className="text-sm text-slate-400 mb-4">
           Supports CSV, Excel, PDF, and most bank formats
         </p>
-        <Button className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white">
+        <Button
+          onClick={(e) => { e.stopPropagation(); goToRealImport(); }}
+          className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white"
+        >
           Choose File
         </Button>
       </div>
@@ -374,10 +403,25 @@ function ReviewCategoriesStep() {
 }
 
 function ExploreInsightsStep() {
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
+  const { skipOnboarding, completeStep, nextStep } = useOnboarding();
+
+  const goTo = (view: string) => {
+    // Same confirmed-auth guard as ImportStatementsStep — see comment there.
+    if (!authLoading && user) {
+      skipOnboarding();
+      navigate(`/dashboard?view=${view}`);
+    } else {
+      completeStep('explore-insights');
+      nextStep();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">You're all set! Here's what you can do now:</p>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg p-4">
           <TrendingUp className="w-8 h-8 text-purple-400 mb-3" />
@@ -385,7 +429,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             See department profitability, client analysis, and project margins
           </p>
-          <Button size="sm" className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs">
+          <Button onClick={() => goTo('profit-intelligence')} size="sm" className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -396,7 +440,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Predict your cash position for the next 90 days
           </p>
-          <Button size="sm" className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs">
+          <Button onClick={() => goTo('forecast')} size="sm" className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -407,7 +451,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Model different scenarios and see financial impact
           </p>
-          <Button size="sm" className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs">
+          <Button onClick={() => goTo('simulator')} size="sm" className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -418,7 +462,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Ask questions and get instant financial insights
           </p>
-          <Button size="sm" className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs">
+          <Button onClick={() => goTo('ai-assistant')} size="sm" className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs">
             Chat Now →
           </Button>
         </div>
