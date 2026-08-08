@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -273,12 +274,16 @@ function ImportStatementsStep() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const { skipOnboarding, completeStep, nextStep } = useOnboarding();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const goToRealImport = () => {
-    // This tour runs for anonymous first-time visitors too (mounted outside auth in App.tsx),
-    // and even for a real session `user` briefly reads null while it restores — only jump into
-    // the real (auth-gated) import page once we're CONFIRMED logged in, never on ambiguous/absent
-    // auth, or the route guard bounces them through login, which looks like a broken redirect.
+  const openFilePicker = () => fileInputRef.current?.click();
+
+  const handleFilePicked = () => {
+    // A file was actually picked (the native dialog isn't fake). What happens next depends on
+    // whether there's a real, confirmed session to import into — this tour also runs for
+    // anonymous first-time visitors (mounted outside auth in App.tsx), and even for a real
+    // session `user` briefly reads null while it restores, so we never navigate into the
+    // auth-gated import page on ambiguous/absent auth (that just bounces through login).
     if (!authLoading && user) {
       skipOnboarding();
       navigate('/dashboard?view=import');
@@ -292,11 +297,19 @@ function ImportStatementsStep() {
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">Upload your first bank statement or CSV file to get started.</p>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xls,.xlsx,.pdf"
+        className="sr-only"
+        onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFilePicked(); }}
+      />
+
       <div
         role="button"
         tabIndex={0}
-        onClick={goToRealImport}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') goToRealImport(); }}
+        onClick={openFilePicker}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
         className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
       >
         <Upload className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
@@ -305,7 +318,7 @@ function ImportStatementsStep() {
           Supports CSV, Excel, PDF, and most bank formats
         </p>
         <Button
-          onClick={(e) => { e.stopPropagation(); goToRealImport(); }}
+          onClick={(e) => { e.stopPropagation(); openFilePicker(); }}
           className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white"
         >
           Choose File
