@@ -1,7 +1,15 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
 import { useAuth } from '../../../contexts/AuthContext';
+import {
+  parseCSVFile,
+  autoDetectColumnMapping,
+  processCSVData,
+  type ImportedTransaction,
+} from '@/lib/importUtils';
+import { classifyTransaction } from '@/lib/classificationEngine';
+import { dataStore } from '@/services/dataStore';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -18,6 +26,7 @@ import {
   Rocket
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 const STEP_ICONS = {
   welcome: Sparkles,
@@ -43,8 +52,12 @@ export function OnboardingWizard() {
     nextStep, 
     previousStep, 
     skipOnboarding,
-    completeStep 
+    completeStep
   } = useOnboarding();
+
+  /** Rows parsed from the CSV the user picks in step 3, shown for real in step 4.
+   *  Declared before the early return below so hook order stays stable. */
+  const [importedRows, setImportedRows] = useState<ImportedTransaction[] | null>(null);
 
   if (!isOnboarding) return null;
 
@@ -124,8 +137,8 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 {step.id === 'welcome' && <WelcomeStep />}
                 {step.id === 'connect-bank' && <ConnectBankStep />}
-                {step.id === 'import-statements' && <ImportStatementsStep />}
-                {step.id === 'review-categories' && <ReviewCategoriesStep />}
+                {step.id === 'import-statements' && <ImportStatementsStep onParsed={setImportedRows} />}
+                {step.id === 'review-categories' && <ReviewCategoriesStep rows={importedRows} />}
                 {step.id === 'explore-insights' && <ExploreInsightsStep />}
               </div>
 
@@ -270,26 +283,60 @@ function ConnectBankStep() {
   );
 }
 
-function ImportStatementsStep() {
-  const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
-  const { skipOnboarding, completeStep, nextStep } = useOnboarding();
+function ImportStatementsStep({ onParsed }: { onParsed: (rows: ImportedTransaction[]) => void }) {
+  const { completeStep, nextStep } = useOnboarding();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
 
   const openFilePicker = () => fileInputRef.current?.click();
 
-  const handleFilePicked = () => {
-    // A file was actually picked (the native dialog isn't fake). What happens next depends on
-    // whether there's a real, confirmed session to import into — this tour also runs for
-    // anonymous first-time visitors (mounted outside auth in App.tsx), and even for a real
-    // session `user` briefly reads null while it restores, so we never navigate into the
-    // auth-gated import page on ambiguous/absent auth (that just bounces through login).
-    if (!authLoading && user) {
-      skipOnboarding();
-      navigate('/dashboard?view=import');
-    } else {
+  /** Really parses the chosen CSV with the same pipeline the full importer uses
+   *  (parseCSVFile → autoDetectColumnMapping → processCSVData), then classifies each row,
+   *  so step 4 shows the user's actual transactions instead of canned samples. */
+  const handleFilePicked = async (file: File) => {
+    if (!/\.csv$/i.test(file.name)) {
+      toast.error('Please choose a .csv file here — Excel and PDF are supported on the full import screen.');
+      return;
+    }
+
+    setParsing(true);
+    try {
+      const data = await parseCSVFile(file);
+      if (data.length < 2) {
+        toast.error('That file has no data rows we could read.');
+        return;
+      }
+
+      const headers = data[0].map(h => String(h ?? '').trim());
+      const mapping = autoDetectColumnMapping(headers);
+      const rows = processCSVData(data, mapping, headers);
+
+      if (rows.length === 0) {
+        toast.error("We couldn't find date/description/amount columns in that file.");
+        return;
+      }
+
+      // Real classification against the org's categories + their learned patterns.
+      const categories = dataStore.categories;
+      const previous = dataStore.transactions;
+      const classified = rows.map(r => {
+        const result = classifyTransaction(r.narration, r.amount, r.type, categories, previous, []);
+        return {
+          ...r,
+          suggestedCategory: result.categoryName || undefined,
+          confidence: result.confidence,
+        };
+      });
+
+      onParsed(classified);
+      toast.success(`Parsed ${classified.length} transaction${classified.length === 1 ? '' : 's'} from ${file.name}`);
       completeStep('import-statements');
       nextStep();
+    } catch (e) {
+      console.error(e);
+      toast.error('Could not read that file. Please check it is a valid CSV.');
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -300,9 +347,14 @@ function ImportStatementsStep() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv,.xls,.xlsx,.pdf"
+        accept=".csv,text/csv"
         className="sr-only"
-        onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleFilePicked(); }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Reset so picking the same file again still fires a change event.
+          e.target.value = '';
+          if (file) void handleFilePicked(file);
+        }}
       />
 
       <div
@@ -315,13 +367,14 @@ function ImportStatementsStep() {
         <Upload className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
         <h4 className="text-white font-medium mb-2">Drag & Drop Your Statement</h4>
         <p className="text-sm text-slate-400 mb-4">
-          Supports CSV, Excel, PDF, and most bank formats
+          Pick a CSV file — we'll read it and categorize the real rows on the next step
         </p>
         <Button
+          disabled={parsing}
           onClick={(e) => { e.stopPropagation(); openFilePicker(); }}
-          className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white"
+          className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white disabled:opacity-60"
         >
-          Choose File
+          {parsing ? 'Reading file…' : 'Choose File'}
         </Button>
       </div>
 
@@ -343,13 +396,68 @@ function ImportStatementsStep() {
   );
 }
 
-function ReviewCategoriesStep() {
+function ReviewCategoriesStep({ rows }: { rows: ImportedTransaction[] | null }) {
+  // Real rows from the CSV picked in step 3 — only fall back to the canned samples below
+  // when the user skipped straight past the upload step without choosing a file.
+  if (rows && rows.length > 0) {
+    return (
+      <div className="space-y-4">
+        <p className="text-slate-300 text-lg mb-6">
+          We read <span className="text-white font-medium">{rows.length}</span> transaction{rows.length === 1 ? '' : 's'} from your file and categorized them. Review below.
+        </p>
+
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {rows.map((r) => {
+            const confident = (r.confidence ?? 0) >= 60;
+            return (
+              <div key={r.id} className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate">{r.narration}</p>
+                    <p className="text-xs text-slate-400">{r.date}</p>
+                  </div>
+                  <p className={`font-medium shrink-0 ${r.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                    {r.type === 'credit' ? '+' : '-'}{Math.abs(r.amount).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Brain className={`w-4 h-4 ${confident ? 'text-blue-400' : 'text-amber-400'}`} />
+                  <span className="text-xs text-slate-400">
+                    {confident ? 'AI suggested:' : 'Needs your review:'}
+                  </span>
+                  <span className={`text-xs px-2 py-1 rounded border ${
+                    confident
+                      ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                  }`}>
+                    {r.suggestedCategory || 'Uncategorised'}
+                  </span>
+                  {!!r.confidence && (
+                    <span className={`text-xs ${confident ? 'text-green-400' : 'text-amber-400'}`}>
+                      {confident ? '✓ ' : ''}{r.confidence}% confident
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <p className="text-sm text-blue-200">
+            💡 <strong>Smart Learning:</strong> The more you categorize, the smarter the AI becomes!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <p className="text-slate-300 text-lg mb-6">Our AI has automatically categorized your transactions. Review and teach it your preferences.</p>
-      
+      <p className="text-slate-300 text-lg mb-6">Here's an example of how our AI automatically categorizes transactions — go back a step and pick a CSV to see it run on your own data.</p>
+
       <div className="space-y-3">
-        {/* Sample transactions */}
+        {/* Sample transactions — shown only when no file was picked in the previous step */}
         <div className="bg-white/5 border border-white/10 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div>
