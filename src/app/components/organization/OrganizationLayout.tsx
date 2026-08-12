@@ -96,7 +96,7 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
       }}></div>
 
       {/* Top Header Bar */}
-      <div className={`min-h-16 sm:min-h-20 ${theme === 'dark' ? 'bg-slate-900/80' : 'bg-white/80'} backdrop-blur-xl border-b ${theme === 'dark' ? 'border-cyan-500/30' : 'border-cyan-400/30'} flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-30`}>
+      <div className={`min-h-16 sm:min-h-20 ${theme === 'dark' ? 'bg-slate-900/80' : 'bg-white/80'} backdrop-blur-xl border-b ${theme === 'dark' ? 'border-cyan-500/30' : 'border-cyan-400/30'} flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-[60]`}>
         {/* Glowing Top Border */}
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent"></div>
 

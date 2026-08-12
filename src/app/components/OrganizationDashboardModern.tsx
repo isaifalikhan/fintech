@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { formatCurrency } from '@/lib/formatters';
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
@@ -68,6 +69,7 @@ function safeFinite(n: unknown, fallback: number): number {
 }
 
 export function OrganizationDashboard() {
+  const orgCurrency = useOrgCurrency();
   const navigate = useNavigate();
   const goToOrgView = useOrgWorkspaceNav();
   const { theme = 'dark' } = useTheme();
@@ -350,7 +352,7 @@ export function OrganizationDashboard() {
                 icon={TrendingUp}
                 label="Total Balance"
                 value={totalBalance}
-                currency="PKR"
+                currency={orgCurrency}
                 percentage="12.5%"
                 trend="up"
                 delay={0}
@@ -360,7 +362,7 @@ export function OrganizationDashboard() {
                 icon={Wallet}
                 label="Cash in Hand"
                 value={cashInHand}
-                currency="PKR"
+                currency={orgCurrency}
                 percentage="8.2%"
                 trend="up"
                 delay={0.1}
@@ -370,7 +372,7 @@ export function OrganizationDashboard() {
                 icon={DollarSign}
                 label="Monthly Profit"
                 value={monthlyProfit}
-                currency="PKR"
+                currency={orgCurrency}
                 percentage="15.7%"
                 trend="up"
                 delay={0.2}
@@ -380,7 +382,7 @@ export function OrganizationDashboard() {
                 icon={BarChart3}
                 label="Net Worth"
                 value={netWorth}
-                currency="PKR"
+                currency={orgCurrency}
                 percentage="9.3%"
                 trend="up"
                 delay={0.3}
@@ -1031,7 +1033,8 @@ export function OrganizationDashboard() {
             <DialogDescription
               className={theme === 'dark' ? 'text-slate-400' : undefined}
             >
-              Upload a CSV or spreadsheet to import transactions.
+              Upload a CSV or PDF bank statement to import transactions. Excel files aren't
+              supported — export as CSV first.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">

@@ -257,6 +257,21 @@ export function EnhancedStatementImport({
       // Process CSV data
       const transactions = processCSVData(csvData, columnMapping, csvHeaders);
 
+      // Never advance to Review with nothing to review — that used to show a dead
+      // "Total 0 / To Import 0" screen plus a "Parsed 0 rows" *success* toast, leaving the
+      // user stuck with no idea what went wrong. Explain the likely cause instead.
+      if (transactions.length === 0) {
+        const dataRowCount = Math.max(0, csvData.length - 1);
+        toast.error(
+          dataRowCount === 0
+            ? 'That file has no data rows below the header.'
+            : `None of the ${dataRowCount} row(s) could be read. Check the Column Mapping step — the date, description and amount columns must point at real columns.`,
+          { duration: 8000 },
+        );
+        setCurrentStep('mapping');
+        return;
+      }
+
       // Detect duplicates (ledger rows may omit fields — handled in importUtils)
       findDuplicates(transactions, existingTransactions);
 

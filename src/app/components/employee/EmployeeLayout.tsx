@@ -70,7 +70,7 @@ export function EmployeeLayout({ children, currentView, onViewChange }: Employee
       }} />
 
       {/* Top Header Bar */}
-      <div className="min-h-16 sm:min-h-20 backdrop-blur-xl flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-30" style={{
+      <div className="min-h-16 sm:min-h-20 backdrop-blur-xl flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-[60]" style={{
         background: AXIOM.backgrounds.topBar,
         borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
       }}>
