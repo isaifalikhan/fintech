@@ -111,17 +111,8 @@ export function createReportsRouter(): Router {
         };
       });
 
-    if (result.length < months) {
-      const supplemental = [
-        { month: 'Jan', inflow: 125000, outflow: 89000, net: 36000 },
-        { month: 'Feb', inflow: 142000, outflow: 95000, net: 47000 },
-        { month: 'Mar', inflow: 138000, outflow: 92000, net: 46000 },
-        { month: 'Apr', inflow: 165000, outflow: 102000, net: 63000 },
-        { month: 'May', inflow: 158000, outflow: 98000, net: 60000 },
-        { month: 'Jun', inflow: 178000, outflow: 108000, net: 70000 },
-      ];
-      return ok(res, supplemental.slice(0, months));
-    }
+    // Mirrors src/services/reportService.ts — only real months, never padded with invented
+    // figures when the org has less history than requested.
     ok(res, result);
   });
 

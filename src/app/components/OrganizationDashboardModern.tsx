@@ -177,15 +177,24 @@ export function OrganizationDashboard() {
     }));
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Real monthly revenue / expenses / profit from the org's own transactions. This was a
+  // synthetic sine-wave series (`2000000 + Math.sin(i * 0.5) * 500000`) that looked like a real
+  // 12-month trend but was identical for every organization.
+  const { data: cashFlowMonths } = useServiceArray(
+    () => svc.reports.getCashFlow(12),
+    [svc.orgId],
+    ['transactions'],
+  );
+
   const profitDataFull = useMemo(
     () =>
-      Array.from({ length: 12 }, (_, i) => ({
-        name: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
-        Revenue: 2000000 + Math.sin(i * 0.5) * 500000 + i * 150000,
-        Expenses: 1200000 + Math.cos(i * 0.7) * 300000 + i * 80000,
-        Profit: 800000 + Math.sin(i * 0.3) * 400000 + i * 100000,
+      cashFlowMonths.map(m => ({
+        name: m.month,
+        Revenue: safeFinite(m.inflow, 0),
+        Expenses: safeFinite(m.outflow, 0),
+        Profit: safeFinite(m.net, 0),
       })),
-    [],
+    [cashFlowMonths],
   );
 
   const profitData = useMemo(() => {
@@ -521,7 +530,7 @@ export function OrganizationDashboard() {
                       style={{ fontSize: '12px', fontWeight: 600 }}
                       tickLine={false}
                       axisLine={{ stroke: theme === 'dark' ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.3)' }}
-                      tickFormatter={(value) => `₨${(value / 1000).toFixed(0)}K`}
+                      tickFormatter={(value) => formatCurrency(value, orgCurrency, { compact: true })}
                     />
                     <Tooltip 
                       contentStyle={{ 

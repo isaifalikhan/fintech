@@ -206,18 +206,9 @@ export const reportService = {
         };
       });
 
-    if (result.length < months) {
-      const supplemental: CashFlowSummary[] = [
-        { month: 'Jan', inflow: 125000, outflow: 89000, net: 36000 },
-        { month: 'Feb', inflow: 142000, outflow: 95000, net: 47000 },
-        { month: 'Mar', inflow: 138000, outflow: 92000, net: 46000 },
-        { month: 'Apr', inflow: 165000, outflow: 102000, net: 63000 },
-        { month: 'May', inflow: 158000, outflow: 98000, net: 60000 },
-        { month: 'Jun', inflow: 178000, outflow: 108000, net: 70000 },
-      ];
-      return { success: true, data: supplemental.slice(0, months) };
-    }
-
+    // Return only the months the org actually has data for. This used to substitute a block of
+    // invented figures (Jan–Jun, inflow 125000, …) whenever history was shorter than `months`,
+    // which put fabricated revenue on the dashboard chart and cash-flow reports.
     return { success: true, data: result };
   },
 
