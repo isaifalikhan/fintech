@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useOrgServices } from '@/hooks/useOrgServices';
@@ -72,6 +73,7 @@ function pkrApprox(balance: number, currency: string): number {
 }
 
 export function AccountsWallets() {
+  const orgCurrency = useOrgCurrency();
   const { theme } = useTheme();
   const goToOrgView = useOrgWorkspaceNav();
   const [selectedType, setSelectedType] = useState<'all' | AccountCategory>('all');
@@ -708,7 +710,7 @@ export function AccountsWallets() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Total balance (PKR approx.)</p>
-              <p className="text-2xl font-bold text-white">{formatCurrency(totalBalance, 'PKR')}</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totalBalance, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"
@@ -732,7 +734,7 @@ export function AccountsWallets() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Bank accounts</p>
-              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(totalBankBalance, 'PKR')}</p>
+              <p className="text-2xl font-bold text-cyan-400">{formatCurrency(totalBankBalance, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"
@@ -756,7 +758,7 @@ export function AccountsWallets() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Cash in hand</p>
-              <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalCash, 'PKR')}</p>
+              <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalCash, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"
@@ -780,7 +782,7 @@ export function AccountsWallets() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Online wallets, cards &amp; credit</p>
-              <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalVirtual, 'PKR')}</p>
+              <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalVirtual, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"

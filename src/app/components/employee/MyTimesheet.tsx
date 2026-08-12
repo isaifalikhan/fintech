@@ -9,16 +9,11 @@ import {
 } from 'lucide-react';
 import { employeeService } from '@/services/employeeService';
 import type { TimesheetEntry } from '@/services/employeeService';
-import { useService, useMutation } from '@/hooks/useService';
+import { useService, useServiceArray, useMutation } from '@/hooks/useService';
+import { useOrgServices } from '@/hooks/useOrgServices';
 import { useAuth } from '@/contexts/AuthContext';
 
 // ── Constants ──────────────────────────────────────────────────────────
-
-const TIMER_PROJECTS = [
-  { id: 'proj-001', name: 'Brand Refresh - TechCorp' },
-  { id: 'proj-002', name: 'Mobile App - StartupXYZ' },
-  { id: 'proj-003', name: 'Internal Tools' },
-];
 
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
@@ -86,10 +81,23 @@ export function MyTimesheet() {
     (ids: string[]) => employeeService.submitTimesheet(ids, orgId),
   );
 
+  // The org's real projects — hours used to be tagged against a hardcoded list
+  // ("Brand Refresh - TechCorp" etc.) that had nothing to do with this organization.
+  const orgSvc = useOrgServices();
+  const { data: orgProjects } = useServiceArray(
+    () => orgSvc.projects.getAll(),
+    [orgSvc.orgId],
+    ['projects'],
+  );
+  const TIMER_PROJECTS = useMemo(
+    () => orgProjects.map(p => ({ id: p.id, name: p.name })),
+    [orgProjects],
+  );
+
   // ── Timer state ──
   const [isTimerRunning, setIsTimerRunning]   = useState(false);
   const [elapsedSeconds, setElapsedSeconds]   = useState(0);
-  const [timerProjectId, setTimerProjectId]   = useState(TIMER_PROJECTS[0].id);
+  const [timerProjectId, setTimerProjectId]   = useState('');
   const [timerTask,      setTimerTask]         = useState('');
   const [timerBillable,  setTimerBillable]     = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,11 +108,19 @@ export function MyTimesheet() {
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualForm, setManualForm] = useState({
     date: todayDate(),
-    projectId: TIMER_PROJECTS[0].id,
+    projectId: '',
     task: '',
     hours: '',
     billable: true,
   });
+
+  // Default both selectors to the first real project once it loads.
+  useEffect(() => {
+    const first = TIMER_PROJECTS[0]?.id;
+    if (!first) return;
+    setTimerProjectId(prev => (prev ? prev : first));
+    setManualForm(prev => (prev.projectId ? prev : { ...prev, projectId: first }));
+  }, [TIMER_PROJECTS]);
 
   // ── Toast ──
   const [toast, setToast] = useState('');
@@ -148,7 +164,11 @@ export function MyTimesheet() {
     timesheetActionLockRef.current = true;
     try {
       const hours = Math.round((elapsedSeconds / 3600) * 100) / 100;
-      const project = TIMER_PROJECTS.find(p => p.id === timerProjectId)!;
+      const project = TIMER_PROJECTS.find(p => p.id === timerProjectId);
+      if (!project) {
+        showToast('Pick a project before logging time.');
+        return;
+      }
 
       const result = await createMutation.execute({
         date: todayDate(),
@@ -183,7 +203,11 @@ export function MyTimesheet() {
     if (timesheetActionLockRef.current) return;
     timesheetActionLockRef.current = true;
     try {
-      const project = TIMER_PROJECTS.find(p => p.id === manualForm.projectId)!;
+      const project = TIMER_PROJECTS.find(p => p.id === manualForm.projectId);
+      if (!project) {
+        showToast('Pick a project before logging time.');
+        return;
+      }
 
       const result = await createMutation.execute({
         date: manualForm.date,
@@ -198,7 +222,7 @@ export function MyTimesheet() {
       if (result.success) {
         await refetch();
         setShowManualForm(false);
-        setManualForm({ date: todayDate(), projectId: TIMER_PROJECTS[0].id, task: '', hours: '', billable: true });
+        setManualForm({ date: todayDate(), projectId: TIMER_PROJECTS[0]?.id ?? '', task: '', hours: '', billable: true });
         showToast(`Logged ${hrs}h on ${project.name}`);
       }
     } finally {

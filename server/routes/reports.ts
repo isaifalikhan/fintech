@@ -19,10 +19,25 @@ export function createReportsRouter(): Router {
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // Mirrors src/services/reportService.ts — real cash sits on bank accounts/wallets, not on the
+    // chart-of-accounts mirror (whose balances stay 0 unless journalled), and receivables/payables
+    // fall back to the Loans module when no AR/AP chart account exists.
+    const orgBankAccounts = store.bankAccounts.filter(b => b.organizationId === orgId && b.isActive);
     const cashAccounts = accounts.filter(a => a.subtype === 'bank_account' || a.subtype === 'current_asset');
-    const cashOnHand = cashAccounts.reduce((s, a) => s + a.balance, 0);
+    const cashOnHand = orgBankAccounts.length > 0
+      ? orgBankAccounts.reduce((s, b) => s + (Number(b.balance) || 0), 0)
+      : cashAccounts.reduce((s, a) => s + a.balance, 0);
     const arAccount = accounts.find(a => a.name.toLowerCase().includes('receivable'));
     const apAccount = accounts.find(a => a.name.toLowerCase().includes('payable'));
+    const openLoans = store.loans.filter(
+      l => l.organizationId === orgId && l.status !== 'closed' && l.status !== 'written_off',
+    );
+    const outstanding = (direction: 'to_receive' | 'to_pay') =>
+      openLoans
+        .filter(l => l.type === direction)
+        .reduce((s, l) => s + Math.abs(Number(l.remainingBalance ?? l.amount) || 0), 0);
+    const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
+    const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
     const pendingTransactions = txns.filter(t => t.status === 'pending').length;
 
     ok(res, {
@@ -31,8 +46,8 @@ export function createReportsRouter(): Router {
       netProfit,
       profitMargin: Math.round(profitMargin * 10) / 10,
       cashOnHand,
-      accountsReceivable: arAccount?.balance || 0,
-      accountsPayable: apAccount?.balance || 0,
+      accountsReceivable,
+      accountsPayable,
       pendingTransactions,
       revenueChange: 12.7,
       expenseChange: 8.3,

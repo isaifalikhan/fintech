@@ -3,15 +3,24 @@ import { AXIOM } from '../../../styles/axiom-tokens';
 import { Settings, User, Bell, Shield, Globe, Palette, HelpCircle } from 'lucide-react';
 import { authService } from '@/services/authService';
 import { useAuth } from '@/contexts/AuthContext';
+import { employeeService } from '@/services/employeeService';
+import { useService } from '@/hooks/useService';
 
 export function EmployeeSettings() {
-  const { user } = useAuth();
+  const { user, currentOrganization } = useAuth();
+  // Real profile facts for THIS employee. Phone/department used to be literals
+  // ('+1 555-0105' / 'Development'), so every employee saw one person's details.
+  const { data: summary } = useService(
+    () => employeeService.getDashboardSummary(currentOrganization?.id ?? '', user?.id ?? ''),
+    [currentOrganization?.id, user?.id],
+  );
+
   const sections = [
     { title: 'Profile Settings', icon: User, color: 'blue', items: [
       { label: 'Full Name', value: user?.name ?? '', type: 'text' },
       { label: 'Email', value: user?.email ?? '', type: 'text' },
-      { label: 'Phone', value: '+1 555-0105', type: 'text' },
-      { label: 'Department', value: 'Development', type: 'readonly' },
+      { label: 'Department', value: summary?.department ?? '—', type: 'readonly' },
+      { label: 'Position', value: summary?.position ?? '—', type: 'readonly' },
     ]},
     { title: 'Notification Preferences', icon: Bell, color: 'purple', items: [
       { label: 'Email Notifications', value: true, type: 'toggle' },

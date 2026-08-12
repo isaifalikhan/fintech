@@ -73,11 +73,31 @@ export const reportService = {
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // Real cash lives on the bank accounts/wallets the user actually maintains — the chart-of-
+    // accounts mirror is not kept in step with them (its balances stay 0 unless journalled), which
+    // made "Cash in Hand" and "Net Worth" read 0 while the dashboard's own Total Balance tile
+    // showed the true figure. Prefer bank accounts; fall back to the chart only if none exist.
+    const bankAccounts = dataStore.bankAccounts.filter(
+      b => b.organizationId === organizationId && b.isActive,
+    );
     const cashAccounts = accounts.filter(a => a.subtype === 'bank_account' || a.subtype === 'current_asset');
-    const cashOnHand = cashAccounts.reduce((s, a) => s + a.balance, 0);
+    const cashOnHand = bankAccounts.length > 0
+      ? bankAccounts.reduce((s, b) => s + (Number(b.balance) || 0), 0)
+      : cashAccounts.reduce((s, a) => s + a.balance, 0);
 
+    // Receivables/payables: use the chart accounts when they exist, otherwise derive from the
+    // Loans & Liabilities module, which is where this app actually tracks money owed either way.
     const arAccount = accounts.find(a => a.name.toLowerCase().includes('receivable'));
     const apAccount = accounts.find(a => a.name.toLowerCase().includes('payable'));
+    const openLoans = dataStore.loans.filter(
+      l => l.organizationId === organizationId && l.status !== 'closed' && l.status !== 'written_off',
+    );
+    const outstanding = (direction: 'to_receive' | 'to_pay') =>
+      openLoans
+        .filter(l => l.type === direction)
+        .reduce((s, l) => s + Math.abs(Number(l.remainingBalance ?? l.amount) || 0), 0);
+    const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
+    const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
 
     const pendingTransactions = txns.filter(t => t.status === 'pending').length;
 
@@ -89,8 +109,8 @@ export const reportService = {
         netProfit,
         profitMargin: Math.round(profitMargin * 10) / 10,
         cashOnHand,
-        accountsReceivable: arAccount?.balance || 0,
-        accountsPayable: apAccount?.balance || 0,
+        accountsReceivable,
+        accountsPayable,
         pendingTransactions,
         revenueChange: 12.7,
         expenseChange: 8.3,

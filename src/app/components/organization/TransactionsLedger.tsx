@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useOrgServices } from '@/hooks/useOrgServices';
@@ -61,6 +62,7 @@ function statusLabel(status: string): string {
 }
 
 export function TransactionsLedger() {
+  const orgCurrency = useOrgCurrency();
   const { theme } = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterScope, setFilterScope] = useState<'all' | 'business' | 'personal'>('all');
@@ -362,7 +364,7 @@ export function TransactionsLedger() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Income</p>
-              <p className="text-2xl font-bold text-emerald-400">+{formatCurrency(totalIncome, 'PKR')}</p>
+              <p className="text-2xl font-bold text-emerald-400">+{formatCurrency(totalIncome, orgCurrency)}</p>
             </div>
             <div 
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -386,7 +388,7 @@ export function TransactionsLedger() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Expense</p>
-              <p className="text-2xl font-bold text-red-400">-{formatCurrency(totalExpense, 'PKR')}</p>
+              <p className="text-2xl font-bold text-red-400">-{formatCurrency(totalExpense, orgCurrency)}</p>
             </div>
             <div 
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -411,7 +413,7 @@ export function TransactionsLedger() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Net</p>
               <p className={`text-2xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {totalIncome - totalExpense >= 0 ? '+' : ''}{formatCurrency(totalIncome - totalExpense, 'PKR')}
+                {totalIncome - totalExpense >= 0 ? '+' : ''}{formatCurrency(totalIncome - totalExpense, orgCurrency)}
               </p>
             </div>
             <div 

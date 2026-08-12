@@ -211,10 +211,22 @@ export function PlatformHome() {
           <h3 className="text-white font-bold">Attention Required</h3>
         </div>
         <div className="space-y-3">
-          {[
-            { title: '5 organizations at churn risk', sub: 'Review billing status and engagement' },
-            { title: '3 organizations with overdue payments', sub: 'Send payment reminders' },
-          ].map((alert, i) => (
+          {/* Derived from the same `stats` the KPI cards above use — these were hardcoded
+              ("5 organizations at churn risk"), so they contradicted the real counts. */}
+          {([
+            stats.churnRiskOrgs > 0 && {
+              title: `${stats.churnRiskOrgs} organization${stats.churnRiskOrgs === 1 ? '' : 's'} at churn risk`,
+              sub: 'Review billing status and engagement',
+            },
+            stats.suspendedOrgs > 0 && {
+              title: `${stats.suspendedOrgs} organization${stats.suspendedOrgs === 1 ? '' : 's'} suspended`,
+              sub: 'Resolve account status',
+            },
+            stats.trialOrgs > 0 && {
+              title: `${stats.trialOrgs} organization${stats.trialOrgs === 1 ? '' : 's'} on trial`,
+              sub: 'Follow up before the trial ends',
+            },
+          ].filter(Boolean) as { title: string; sub: string }[]).map((alert, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, x: -10 }}

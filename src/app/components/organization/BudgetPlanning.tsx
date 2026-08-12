@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -75,6 +76,7 @@ const budgetTemplates: BudgetTemplate[] = [
 ];
 
 export function BudgetPlanning() {
+  const orgCurrency = useOrgCurrency();
   const svc = useOrgServices();
   const { data: rawBudgets, loading, error } = useServiceArray(
     () => svc.budgets.getAll(),
@@ -312,7 +314,7 @@ export function BudgetPlanning() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Budgeted</p>
               <p className="text-2xl font-bold text-white">
-                {formatCurrency(totalBudgeted, 'PKR')}
+                {formatCurrency(totalBudgeted, orgCurrency)}
               </p>
             </div>
             <div 
@@ -338,7 +340,7 @@ export function BudgetPlanning() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Spent</p>
               <p className="text-2xl font-bold text-cyan-400">
-                {formatCurrency(totalSpent, 'PKR')}
+                {formatCurrency(totalSpent, orgCurrency)}
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 {totalBudgeted > 0 ? ((totalSpent / totalBudgeted) * 100).toFixed(1) : '0.0'}% used
@@ -367,7 +369,7 @@ export function BudgetPlanning() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Remaining</p>
               <p className="text-2xl font-bold text-emerald-400">
-                {formatCurrency(totalBudgeted - totalSpent, 'PKR')}
+                {formatCurrency(totalBudgeted - totalSpent, orgCurrency)}
               </p>
             </div>
             <div 
@@ -572,19 +574,19 @@ export function BudgetPlanning() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-400">Budget</span>
                       <span className="text-white font-medium">
-                        {formatCurrency(budget.amount, 'PKR')}
+                        {formatCurrency(budget.amount, orgCurrency)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-400">Spent</span>
                       <span className="text-cyan-400 font-medium">
-                        {formatCurrency(budget.spent, 'PKR')}
+                        {formatCurrency(budget.spent, orgCurrency)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-slate-400">Remaining</span>
                       <span className={variance > 0 ? 'text-red-400' : 'text-emerald-400'}>
-                        {formatCurrency(Math.abs(variance), 'PKR')}
+                        {formatCurrency(Math.abs(variance), orgCurrency)}
                         {variance > 0 ? ' over' : ' left'}
                       </span>
                     </div>
@@ -623,7 +625,7 @@ export function BudgetPlanning() {
                       <AlertTriangle className="size-4 text-amber-400 flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-amber-400">
                         {percentageUsed >= 100
-                          ? `Budget exceeded by ${formatCurrency(variance, 'PKR')}`
+                          ? `Budget exceeded by ${formatCurrency(variance, orgCurrency)}`
                           : `Approaching budget limit (${budget.alertThreshold}% threshold)`
                         }
                       </p>
@@ -678,19 +680,19 @@ export function BudgetPlanning() {
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Budgeted</p>
                       <p className="text-lg font-bold text-white">
-                        {formatCurrency(data.budgeted, 'PKR')}
+                        {formatCurrency(data.budgeted, orgCurrency)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Spent</p>
                       <p className="text-lg font-bold text-cyan-400">
-                        {formatCurrency(data.spent, 'PKR')}
+                        {formatCurrency(data.spent, orgCurrency)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Variance</p>
                       <p className={`text-lg font-bold ${variance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {variance > 0 ? '+' : ''}{formatCurrency(variance, 'PKR')}
+                        {variance > 0 ? '+' : ''}{formatCurrency(variance, orgCurrency)}
                       </p>
                     </div>
                   </div>
