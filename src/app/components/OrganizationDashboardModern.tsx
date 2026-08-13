@@ -496,6 +496,26 @@ export function OrganizationDashboard() {
                     : '1px solid rgba(148, 163, 184, 0.15)',
                 }}
               >
+                {profitData.length < 2 ? (
+                  /* A trend needs at least two points — with one (or zero) months of real history
+                     Recharts draws isolated dots and no line, which reads as "broken/not updating".
+                     Say what's actually going on instead. */
+                  <div className="flex h-full flex-col items-center justify-center text-center gap-2 px-4">
+                    <BarChart3 className="size-8 text-slate-500" />
+                    <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                      {profitDataFull.length === 0
+                        ? 'No transactions yet'
+                        : `Only ${profitDataFull.length} month${profitDataFull.length === 1 ? '' : 's'} of history`}
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-xs">
+                      {profitDataFull.length === 0
+                        ? 'Add or import transactions and your revenue, expenses and profit trend will appear here.'
+                        : profitDataFull.length > profitData.length
+                          ? 'Pick a longer range above to see the trend.'
+                          : 'A trend line needs at least two months of transactions.'}
+                    </p>
+                  </div>
+                ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsComposedChart data={profitData}>
                     <defs>
@@ -552,7 +572,7 @@ export function OrganizationDashboard() {
                         fontSize: '12px',
                         fontWeight: 600
                       }}
-                      formatter={(value: any) => [`₨${(value / 1000).toFixed(1)}K`, '']}
+                      formatter={(value: any) => [formatCurrency(Number(value), orgCurrency), '']}
                     />
                     
                     <Area
@@ -617,6 +637,7 @@ export function OrganizationDashboard() {
                     />
                   </RechartsComposedChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </motion.div>
 
