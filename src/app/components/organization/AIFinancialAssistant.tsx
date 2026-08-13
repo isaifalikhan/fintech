@@ -179,14 +179,20 @@ export function AIFinancialAssistant() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatLogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Scroll ONLY the chat log. `chatEndRef.scrollIntoView()` walks every scrollable ancestor,
+  // so each new message also yanked the whole page down when you clicked a prompt chip.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const log = chatLogRef.current;
+    if (!log) return;
+    log.scrollTop = log.scrollHeight;
   }, [messages, sending]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // preventScroll: focusing the composer on mount otherwise jumps the page to it.
+    inputRef.current?.focus({ preventScroll: true });
   }, []);
 
   const handleSend = useCallback(async (text?: string) => {
@@ -285,6 +291,7 @@ export function AIFinancialAssistant() {
         </div>
 
         <div
+          ref={chatLogRef}
           className="mb-4 max-h-[min(360px,50vh)] min-h-[200px] overflow-y-auto rounded-2xl border border-slate-700/60 bg-black/30 px-4 py-3"
           role="log"
           aria-live="polite"

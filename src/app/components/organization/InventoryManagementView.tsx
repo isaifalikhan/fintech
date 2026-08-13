@@ -2,7 +2,17 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useServiceArray } from '@/hooks/useService';
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { formatCurrency, formatDate } from '@/lib/formatters';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { 
   Package, 
   TrendingUp,
@@ -25,20 +35,96 @@ type InventoryView = 'items' | 'transactions' | 'analytics';
 export function InventoryManagementView() {
   const [activeView, setActiveView] = useState<InventoryView>('items');
   const [searchQuery, setSearchQuery] = useState('');
+  const orgCurrency = useOrgCurrency();
 
   const svc = useOrgServices();
 
-  const { data: inventoryItems, loading: itemsLoading, error: itemsError } = useServiceArray(
+  const { data: inventoryItems, loading: itemsLoading, error: itemsError, refetch: refetchItems } = useServiceArray(
     () => svc.inventory.getAll(),
     [svc.orgId],
     ['inventoryItems'],
   );
 
-  const { data: inventoryTransactions, loading: txnLoading, error: txnError } = useServiceArray(
+  const { data: inventoryTransactions, loading: txnLoading, error: txnError, refetch: refetchTxns } = useServiceArray(
     () => svc.inventory.getAllTransactions(),
     [svc.orgId],
     ['inventoryTransactions', 'inventoryItems'],
   );
+
+  // ── Add Item / New Purchase dialogs (both buttons previously had no onClick at all) ──
+  const [addOpen, setAddOpen] = useState(false);
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const emptyItem = {
+    sku: '', name: '', category: '', unit: 'unit',
+    currentStock: '', reorderLevel: '', reorderQuantity: '',
+    averageCost: '', sellingPrice: '',
+  };
+  const [itemForm, setItemForm] = useState(emptyItem);
+
+  const emptyPurchase = {
+    inventoryItemId: '', quantity: '', unitCost: '',
+    date: new Date().toISOString().slice(0, 10), referenceNumber: '', notes: '',
+  };
+  const [purchaseForm, setPurchaseForm] = useState(emptyPurchase);
+
+  const num = (v: string) => {
+    const n = Number.parseFloat(String(v).replace(/,/g, '').trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const handleAddItem = async () => {
+    if (!itemForm.name.trim()) return toast.error('Enter an item name.');
+    if (!itemForm.sku.trim()) return toast.error('Enter a SKU.');
+    setSaving(true);
+    const res = await svc.inventory.create({
+      sku: itemForm.sku.trim(),
+      name: itemForm.name.trim(),
+      category: itemForm.category.trim() || 'General',
+      unit: itemForm.unit.trim() || 'unit',
+      costingMethod: 'weighted_average',
+      currentStock: num(itemForm.currentStock),
+      reorderLevel: num(itemForm.reorderLevel),
+      reorderQuantity: num(itemForm.reorderQuantity),
+      averageCost: num(itemForm.averageCost),
+      lastCost: num(itemForm.averageCost),
+      sellingPrice: num(itemForm.sellingPrice),
+      assetAccountId: '',
+      cogsAccountId: '',
+      isActive: true,
+    } as any);
+    setSaving(false);
+    if (!res.success) return toast.error(res.error || 'Could not add item.');
+    toast.success(`"${itemForm.name.trim()}" added to inventory.`);
+    setAddOpen(false);
+    setItemForm(emptyItem);
+    await refetchItems();
+  };
+
+  const handleRecordPurchase = async () => {
+    if (!purchaseForm.inventoryItemId) return toast.error('Choose an item.');
+    const qty = num(purchaseForm.quantity);
+    const cost = num(purchaseForm.unitCost);
+    if (qty <= 0) return toast.error('Enter a quantity greater than zero.');
+    setSaving(true);
+    const res = await svc.inventory.recordTransaction({
+      inventoryItemId: purchaseForm.inventoryItemId,
+      date: purchaseForm.date,
+      type: 'purchase',
+      quantity: qty,
+      unitCost: cost,
+      totalAmount: qty * cost,
+      referenceNumber: purchaseForm.referenceNumber.trim() || undefined,
+      notes: purchaseForm.notes.trim() || undefined,
+    } as any);
+    setSaving(false);
+    if (!res.success) return toast.error(res.error || 'Could not record purchase.');
+    toast.success(`Recorded purchase of ${qty} unit(s).`);
+    setPurchaseOpen(false);
+    setPurchaseForm(emptyPurchase);
+    await Promise.all([refetchItems(), refetchTxns()]);
+  };
 
   const loadError = itemsError || txnError;
 
@@ -91,6 +177,14 @@ export function InventoryManagementView() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (inventoryItems.length === 0) {
+                  toast.error('Add an inventory item first, then record a purchase against it.');
+                  return;
+                }
+                setPurchaseForm({ ...emptyPurchase, inventoryItemId: inventoryItems[0].id });
+                setPurchaseOpen(true);
+              }}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={AXIOM.buttons.secondary}
             >
@@ -100,6 +194,7 @@ export function InventoryManagementView() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => { setItemForm(emptyItem); setAddOpen(true); }}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={{
                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.4), rgba(59, 130, 246, 0.4))',
@@ -648,6 +743,139 @@ export function InventoryManagementView() {
           </motion.div>
         </div>
       )}
+
+      {/* Add Item */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add inventory item</DialogTitle>
+            <DialogDescription>Saved to this organization's inventory.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+            {([
+              ['Name', 'name', 'text', 'Blue widget'],
+              ['SKU', 'sku', 'text', 'SKU-001'],
+              ['Category', 'category', 'text', 'General'],
+              ['Unit', 'unit', 'text', 'unit'],
+              ['Opening stock', 'currentStock', 'number', '0'],
+              ['Reorder level', 'reorderLevel', 'number', '0'],
+              ['Reorder quantity', 'reorderQuantity', 'number', '0'],
+              [`Average cost (${orgCurrency})`, 'averageCost', 'number', '0'],
+              [`Selling price (${orgCurrency})`, 'sellingPrice', 'number', '0'],
+            ] as const).map(([label, key, type, ph]) => (
+              <div key={key} className="space-y-1">
+                <label className="text-xs text-slate-400">{label}</label>
+                <input
+                  type={type}
+                  value={(itemForm as any)[key]}
+                  placeholder={ph}
+                  onChange={(e) => setItemForm({ ...itemForm, [key]: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <button onClick={() => setAddOpen(false)} className="px-4 py-2 rounded-lg text-slate-400 text-sm" style={AXIOM.buttons.outline}>
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleAddItem()}
+              disabled={saving}
+              className="px-6 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.success}
+            >
+              {saving ? 'Saving…' : 'Add item'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Purchase */}
+      <Dialog open={purchaseOpen} onOpenChange={setPurchaseOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Record purchase</DialogTitle>
+            <DialogDescription>Increases stock and updates the item's average cost.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">Item</label>
+              <select
+                value={purchaseForm.inventoryItemId}
+                onChange={(e) => setPurchaseForm({ ...purchaseForm, inventoryItemId: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              >
+                {inventoryItems.map((i) => (
+                  <option key={i.id} value={i.id}>{i.name} · {i.sku}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Quantity</label>
+                <input
+                  type="number"
+                  value={purchaseForm.quantity}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, quantity: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Unit cost ({orgCurrency})</label>
+                <input
+                  type="number"
+                  value={purchaseForm.unitCost}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, unitCost: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Date</label>
+                <input
+                  type="date"
+                  value={purchaseForm.date}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, date: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">Reference (optional)</label>
+                <input
+                  type="text"
+                  value={purchaseForm.referenceNumber}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, referenceNumber: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white"
+                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              Total: {formatCurrency(num(purchaseForm.quantity) * num(purchaseForm.unitCost), orgCurrency)}
+            </p>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setPurchaseOpen(false)} className="px-4 py-2 rounded-lg text-slate-400 text-sm" style={AXIOM.buttons.outline}>
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleRecordPurchase()}
+              disabled={saving}
+              className="px-6 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.success}
+            >
+              {saving ? 'Saving…' : 'Record purchase'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
