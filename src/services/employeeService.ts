@@ -127,6 +127,7 @@ function requireOrg(orgId: string): { ok: true; orgId: string } | { ok: false; e
 }
 
 const ME = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/me`;
+const PAYROLL = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/payroll`;
 
 export type EmployeeDashboardSummary = ReturnType<typeof emptyEmployeeDashboardSummary>;
 
@@ -341,6 +342,154 @@ export const employeeService = {
     const { orgId: o, userId: u } = ru;
     const rows = dataStore.payslips.filter(p => p.organizationId === o && p.userId === u);
     return { success: true, data: rows };
+  },
+
+  async listOrgPayslips(orgId: string, userId?: string): Promise<ServiceResponse<EmployeePayslip[]>> {
+    const ro = requireOrg(orgId);
+    if (!ro.ok) {
+      return { success: false, data: [], error: ro.error };
+    }
+
+    if (isHttpBackendConfigured()) {
+      const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+      return apiGet<EmployeePayslip[]>(`${PAYROLL(ro.orgId)}/payslips${qs}`);
+    }
+
+    await simulateDelay();
+    const rows = dataStore.payslips.filter(
+      p => p.organizationId === ro.orgId && (!userId || p.userId === userId),
+    );
+    const sorted = [...rows].sort((a, b) => b.issueDate.localeCompare(a.issueDate));
+    return { success: true, data: sorted };
+  },
+
+  async issuePayslip(
+    orgId: string,
+    data: {
+      userId: string;
+      period: string;
+      issueDate: string;
+      gross: number;
+      deductions: { name: string; amount: number }[];
+      bankAccountId: string;
+    },
+  ): Promise<ServiceResponse<EmployeePayslip>> {
+    const fail = (error: string) =>
+      ({ success: false, data: null as unknown as EmployeePayslip, error } as const);
+
+    const ro = requireOrg(orgId);
+    if (!ro.ok) return fail(ro.error);
+
+    if (!data.userId?.trim()) return fail('Employee is required');
+    if (!data.period?.trim()) return fail('Pay period is required');
+    if (!data.issueDate?.trim()) return fail('Issue date is required');
+    if (typeof data.gross !== 'number' || !Number.isFinite(data.gross) || data.gross <= 0) {
+      return fail('Gross pay must be a number greater than 0');
+    }
+    if (data.deductions.some(d => !d.name?.trim() || typeof d.amount !== 'number' || d.amount < 0)) {
+      return fail('Each deduction needs a name and a non-negative amount');
+    }
+    if (!data.bankAccountId?.trim()) return fail('Paying account is required');
+
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<typeof data, EmployeePayslip>(`${PAYROLL(ro.orgId)}/payslips`, data);
+    }
+
+    await simulateDelay(200);
+
+    const member = dataStore.teamMembers.find(m => m.id === data.userId && m.organizationId === ro.orgId);
+    if (!member) return fail('Employee not found in this organization');
+
+    const account = dataStore.bankAccounts.find(
+      a => a.id === data.bankAccountId && a.organizationId === ro.orgId,
+    );
+    if (!account) return fail('Paying account not found');
+
+    const net = data.gross - data.deductions.reduce((s, d) => s + d.amount, 0);
+    if (net < 0) return fail('Deductions exceed gross pay');
+    if (account.balance < net) return fail(`Insufficient balance in ${account.bankName} to cover net pay`);
+
+    const payrollPatterns = ['payroll', 'salary', 'wages'];
+    const payrollCategory = dataStore.categories.find(
+      c =>
+        c.organizationId === ro.orgId &&
+        c.patterns.some(p => payrollPatterns.includes(p.toLowerCase())),
+    );
+
+    const nowIso = new Date().toISOString();
+    const txn = {
+      id: generateId('txn'),
+      organizationId: ro.orgId,
+      bankAccountId: account.id,
+      date: data.issueDate,
+      description: `Payslip — ${member.name} (${data.period})`,
+      narration: `Payslip — ${member.name} (${data.period})`,
+      amount: -net,
+      currency: account.currency,
+      type: 'debit' as const,
+      categoryId: payrollCategory?.id,
+      status: 'reconciled' as const,
+      tags: ['payroll'],
+      attachments: [] as string[],
+      createdAt: nowIso,
+    };
+    dataStore.transactions.unshift(txn);
+    account.balance -= net;
+    dataStore.notify('transactions');
+    dataStore.notify('bankAccounts');
+
+    const payslip: EmployeePayslip = {
+      id: generateId('pay'),
+      organizationId: ro.orgId,
+      userId: data.userId,
+      period: data.period.trim(),
+      issueDate: data.issueDate,
+      gross: data.gross,
+      deductions: data.deductions,
+      net,
+      currency: account.currency,
+      status: 'issued',
+      bankAccountId: account.id,
+      transactionId: txn.id,
+    };
+    dataStore.payslips.unshift(payslip);
+    dataStore.notify('payslips', true);
+
+    return { success: true, data: payslip, message: 'Payslip issued' };
+  },
+
+  async voidPayslip(orgId: string, payslipId: string): Promise<ServiceResponse<null>> {
+    const ro = requireOrg(orgId);
+    if (!ro.ok) return { success: false, data: null, error: ro.error };
+
+    if (isHttpBackendConfigured()) {
+      return apiRequest<null>(`${PAYROLL(ro.orgId)}/payslips/${encodeURIComponent(payslipId)}/void`, {
+        method: 'POST',
+        body: '{}',
+      });
+    }
+
+    await simulateDelay(150);
+
+    const idx = dataStore.payslips.findIndex(p => p.id === payslipId && p.organizationId === ro.orgId);
+    if (idx === -1) return { success: false, data: null, error: 'Payslip not found' };
+
+    const payslip = dataStore.payslips[idx];
+    if (payslip.transactionId) {
+      const txnIdx = dataStore.transactions.findIndex(t => t.id === payslip.transactionId);
+      if (txnIdx !== -1) {
+        const txn = dataStore.transactions[txnIdx];
+        const account = dataStore.bankAccounts.find(a => a.id === txn.bankAccountId);
+        if (account) account.balance -= txn.amount;
+        dataStore.transactions.splice(txnIdx, 1);
+        dataStore.notify('transactions');
+        dataStore.notify('bankAccounts');
+      }
+    }
+    dataStore.payslips.splice(idx, 1);
+    dataStore.notify('payslips', true);
+
+    return { success: true, data: null, message: 'Payslip voided' };
   },
 
   async getTimesheets(orgId: string, userId: string): Promise<ServiceResponse<TimesheetEntry[]>> {
