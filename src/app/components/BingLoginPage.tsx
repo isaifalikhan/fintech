@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Button } from './ui/button';
@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Sparkles, Lock, Mail, ArrowLeft, Zap, Brain } from 'lucide-react';
-import { mockUsers } from '@/data/mockDatabase';
+import { mockUsers, mockOrganizationMembers } from '@/data/mockDatabase';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface BingLoginPageProps {
@@ -76,8 +76,28 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
     }
   };
 
-  // Filter Bing AI users
-  const bingUsers = mockUsers.filter(u => u.role === 'bing_ai');
+  /**
+   * Quick-access demo accounts.
+   *
+   * This used to filter `u.role === 'bing_ai'`, which is not a valid `PlatformRole`
+   * ('platform_admin' | 'platform_manager' | 'organization_user'), so it always matched zero
+   * users and the whole QUICK ACCESS block below silently never rendered. This screen is the
+   * "auto-detect" login — it accepts any demo account and routes by role — so offer one of each.
+   */
+  const demoAccounts = useMemo(() => {
+    const orgRoleOf = (userId: string) =>
+      mockOrganizationMembers.find(m => m.userId === userId)?.role;
+
+    const owner = mockUsers.find(u => orgRoleOf(u.id) === 'owner');
+    const employee = mockUsers.find(u => orgRoleOf(u.id) === 'employee');
+    const platformAdmin = mockUsers.find(u => u.role === 'platform_admin');
+
+    return [
+      owner && { user: owner, label: 'OWNER' },
+      employee && { user: employee, label: 'EMPLOYEE' },
+      platformAdmin && { user: platformAdmin, label: 'PLATFORM' },
+    ].filter((x): x is { user: (typeof mockUsers)[number]; label: string } => Boolean(x));
+  }, []);
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'bg-black' : 'bg-gradient-to-br from-slate-50 to-slate-100'} flex items-center justify-center p-4 relative overflow-hidden`}>
@@ -281,7 +301,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
               </form>
 
               {/* Divider */}
-              {bingUsers.length > 0 && (
+              {demoAccounts.length > 0 && (
                 <>
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
@@ -294,7 +314,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
 
                   {/* Demo Bing AI Accounts */}
                   <div className="space-y-2">
-                    {bingUsers.map((user, index) => (
+                    {demoAccounts.map(({ user, label }, index) => (
                       <motion.button
                         key={user.email}
                         initial={{ opacity: 0, y: 10 }}
@@ -313,9 +333,9 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
                             <p className={`text-sm font-medium font-mono ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{user.name}</p>
                             <p className="text-purple-400/70 text-xs font-mono">{user.email}</p>
                           </div>
-                          <span className="text-xs text-purple-400 font-mono flex items-center gap-1">
+                          <span className="text-xs text-purple-400 font-mono flex items-center gap-1 shrink-0">
                             <Sparkles className="size-3" />
-                            AI
+                            {label}
                           </span>
                         </div>
                       </motion.button>
@@ -324,7 +344,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
 
                   {/* Footer Note */}
                   <p className={`text-xs text-center ${theme === 'dark' ? 'text-slate-500' : 'text-slate-600'} font-mono`}>
-                    Demo account — click a name above to sign in instantly
+                    Demo accounts — click a name above to sign in instantly (routed by role)
                   </p>
                 </>
               )}
