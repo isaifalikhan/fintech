@@ -52,6 +52,7 @@ import { createUserOrgNotificationsRouter, createGlobalNotificationsRouter } fro
 import { createImportsRouter } from './imports.js';
 import { createAuditRouter } from './audit.js';
 import { createEmployeeMeRouter } from './employee.js';
+import { createPayrollRouter } from './payroll.js';
 import { createPlatformRouter } from './platform.js';
 
 function primaryMembershipForUser(members: OrganizationMember[], userId: string): OrganizationMember | null {
@@ -250,6 +251,7 @@ export function createApiV1Router(): Router {
   r.use('/organizations/:organizationId/imports', createImportsRouter());
   r.use('/organizations/:organizationId/audit-logs', createAuditRouter());
   r.use('/organizations/:organizationId/me', createEmployeeMeRouter());
+  r.use('/organizations/:organizationId/payroll', createPayrollRouter());
 
   // §15 Notifications — outside the /organizations/:organizationId prefix, so gated explicitly.
   r.use(
