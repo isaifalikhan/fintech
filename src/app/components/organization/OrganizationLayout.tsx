@@ -12,8 +12,9 @@ import {
   Calculator, 
   FileText, 
   CreditCard, 
-  Users, 
-  Settings, 
+  Users,
+  DollarSign,
+  Settings,
   LogOut,
   Building2,
   Sparkles,
@@ -81,6 +82,7 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'loans', label: 'Loans & Liabilities', icon: Building2 },
     { id: 'team', label: 'Team & Permissions', icon: Users },
+    { id: 'payroll', label: 'Payroll', icon: DollarSign },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
