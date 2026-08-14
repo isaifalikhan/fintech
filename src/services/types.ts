@@ -371,6 +371,9 @@ export interface EmployeePayslip {
   net: number;
   currency: string;
   status: 'draft' | 'issued' | 'paid';
+  issuedBy?: string;       // user id of the admin who issued it
+  bankAccountId?: string;  // paying account
+  transactionId?: string;  // linked ledger transaction, set when a transaction was posted
 }
 
 export interface TimesheetEntry {
