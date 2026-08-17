@@ -50,7 +50,7 @@ function validateIssueInput(body: IssuePayslipInput): { ok: true } | { ok: false
 export function createPayrollRouter(): Router {
   const r = Router({ mergeParams: true });
 
-  r.get('/payslips', (req: Request, res: Response) => {
+  r.get('/payslips', ownerOrAdmin, (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
     const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
     const rows = store.payslips.filter(
@@ -73,8 +73,9 @@ export function createPayrollRouter(): Router {
     const account = store.bankAccounts.find(a => a.id === body.bankAccountId && a.organizationId === orgId);
     if (!account) return notFound(res, 'Paying account');
 
-    const net = body.gross - body.deductions.reduce((s, d) => s + d.amount, 0);
-    if (net < 0) return fail(res, 400, 'Deductions exceed gross pay');
+    const rawNet = body.gross - body.deductions.reduce((s, d) => s + d.amount, 0);
+    const net = Math.round(rawNet * 100) / 100;
+    if (net <= 0) return fail(res, 400, 'Net pay must be greater than 0');
     if (account.balance < net) return fail(res, 400, `Insufficient balance in ${account.bankName} to cover net pay`);
 
     const nowIso = new Date().toISOString();

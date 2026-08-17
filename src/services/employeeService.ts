@@ -126,6 +126,22 @@ function requireOrg(orgId: string): { ok: true; orgId: string } | { ok: false; e
   return { ok: true, orgId: o };
 }
 
+/**
+ * dataStore-mode-only guard: mirrors the server's `isPlatformUser` bypass + `requireOrgRole('owner',
+ * 'admin')` (server/middleware/auth.ts) for payroll mutations. The HTTP backend already enforces this
+ * server-side; dataStore mode has no per-request auth, so callers must pass the acting user's id and
+ * we look their role up ourselves.
+ */
+function isOwnerOrAdminForOrg(orgId: string, actorId: string): boolean {
+  const actor = dataStore.users.find(u => u.id === actorId);
+  if (!actor) return false;
+  if (actor.role === 'platform_admin' || actor.role === 'platform_manager') return true;
+  const membership = dataStore.organizationMembers.find(
+    m => m.userId === actorId && m.organizationId === orgId,
+  );
+  return membership?.role === 'owner' || membership?.role === 'admin';
+}
+
 const ME = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/me`;
 const PAYROLL = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/payroll`;
 
@@ -373,6 +389,7 @@ export const employeeService = {
       deductions: { name: string; amount: number }[];
       bankAccountId: string;
     },
+    actorId: string,
   ): Promise<ServiceResponse<EmployeePayslip>> {
     const fail = (error: string) =>
       ({ success: false, data: null as unknown as EmployeePayslip, error } as const);
@@ -397,6 +414,8 @@ export const employeeService = {
 
     await simulateDelay(200);
 
+    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) return fail('Insufficient role');
+
     const member = dataStore.teamMembers.find(m => m.id === data.userId && m.organizationId === ro.orgId);
     if (!member) return fail('Employee not found in this organization');
 
@@ -405,8 +424,9 @@ export const employeeService = {
     );
     if (!account) return fail('Paying account not found');
 
-    const net = data.gross - data.deductions.reduce((s, d) => s + d.amount, 0);
-    if (net < 0) return fail('Deductions exceed gross pay');
+    const rawNet = data.gross - data.deductions.reduce((s, d) => s + d.amount, 0);
+    const net = Math.round(rawNet * 100) / 100;
+    if (net <= 0) return fail('Net pay must be greater than 0');
     if (account.balance < net) return fail(`Insufficient balance in ${account.bankName} to cover net pay`);
 
     const payrollPatterns = ['payroll', 'salary', 'wages'];
@@ -458,7 +478,7 @@ export const employeeService = {
     return { success: true, data: payslip, message: 'Payslip issued' };
   },
 
-  async voidPayslip(orgId: string, payslipId: string): Promise<ServiceResponse<null>> {
+  async voidPayslip(orgId: string, payslipId: string, actorId: string): Promise<ServiceResponse<null>> {
     const ro = requireOrg(orgId);
     if (!ro.ok) return { success: false, data: null, error: ro.error };
 
@@ -470,6 +490,10 @@ export const employeeService = {
     }
 
     await simulateDelay(150);
+
+    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) {
+      return { success: false, data: null, error: 'Insufficient role' };
+    }
 
     const idx = dataStore.payslips.findIndex(p => p.id === payslipId && p.organizationId === ro.orgId);
     if (idx === -1) return { success: false, data: null, error: 'Payslip not found' };

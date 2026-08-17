@@ -21,8 +21,9 @@ interface DeductionRow {
 }
 
 export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
-  const { user, currentOrganization } = useAuth();
+  const { user, userRole, currentOrganization } = useAuth();
   const orgId = orgIdProp ?? currentOrganization?.id ?? '';
+  const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
   const { data: members } = useServiceArray(
     () => employeeService.getTeamDirectory(orgId),
@@ -40,8 +41,12 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
     ['payslips'],
   );
 
-  const issueMutation = useMutation(employeeService.issuePayslip.bind(employeeService, orgId));
-  const voidMutation = useMutation((id: string) => employeeService.voidPayslip(orgId, id));
+  const actorId = user?.id ?? '';
+  const issueMutation = useMutation(
+    (data: Parameters<typeof employeeService.issuePayslip>[1]) =>
+      employeeService.issuePayslip(orgId, data, actorId),
+  );
+  const voidMutation = useMutation((id: string) => employeeService.voidPayslip(orgId, id, actorId));
 
   const [showForm, setShowForm] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
@@ -93,6 +98,9 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
   };
 
   const handleVoid = async (payslip: EmployeePayslip) => {
+    if (!window.confirm('Void this payslip? This will restore the account balance and cannot be undone.')) {
+      return;
+    }
     const result = await voidMutation.execute(payslip.id);
     if (result.success) {
       toast.success('Payslip voided');
@@ -103,6 +111,19 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
   };
 
   const nameFor = (userId: string) => members.find(m => m.id === userId)?.name ?? userId;
+
+  if (!canManagePayroll) {
+    return (
+      <div className="p-8" style={{ background: AXIOM.backgrounds.main, minHeight: '100%' }}>
+        <div className="rounded-2xl p-8 text-center" style={{ ...AXIOM.containers.list, borderRadius: '1rem' }}>
+          <h1 className="text-2xl font-bold text-white mb-2">Access denied</h1>
+          <p className="text-slate-400 font-mono text-sm">
+            Payroll is only available to organization owners and admins.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8" style={{ background: AXIOM.backgrounds.main, minHeight: '100%' }}>
@@ -283,14 +304,16 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
               <p className="text-sm font-mono text-green-400 font-bold">
                 {formatCurrency(p.net, p.currency, { compact: false })}
               </p>
-              <button
-                type="button"
-                disabled={voidMutation.loading}
-                onClick={() => void handleVoid(p)}
-                className="px-3 py-1.5 rounded-lg text-xs font-mono text-red-400 border border-red-500/30 hover:bg-red-500/10 disabled:opacity-50"
-              >
-                Void
-              </button>
+              {p.transactionId && (
+                <button
+                  type="button"
+                  disabled={voidMutation.loading}
+                  onClick={() => void handleVoid(p)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-mono text-red-400 border border-red-500/30 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  Void
+                </button>
+              )}
             </div>
           ))}
         </div>

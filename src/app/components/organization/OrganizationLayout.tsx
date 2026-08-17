@@ -46,9 +46,10 @@ interface OrganizationLayoutProps {
 }
 
 export function OrganizationLayout({ children, currentView, onViewChange }: OrganizationLayoutProps) {
-  const { user, logout, currentOrganization } = useAuth();
+  const { user, userRole, logout, currentOrganization } = useAuth();
   const { theme } = useTheme();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
   const closeMobileNav = () => setMobileNavOpen(false);
   const selectView = (view: OrgView) => {
@@ -59,7 +60,7 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
   // Use the live org from AuthContext instead of static mock data
   const organization = currentOrganization;
 
-  const navItems: { id: OrgView; label: string; icon: any }[] = [
+  const allNavItems: { id: OrgView; label: string; icon: any }[] = [
     { id: 'finance-os', label: 'Finance OS', icon: Cpu },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'profit-intelligence', label: 'Profit Intelligence', icon: LineChart },
@@ -85,6 +86,9 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
     { id: 'payroll', label: 'Payroll', icon: DollarSign },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  // Payroll is owner/admin only — a viewer or employee shouldn't even see it in the sidebar.
+  const navItems = allNavItems.filter(item => item.id !== 'payroll' || canManagePayroll);
 
   return (
     <div className={`size-full flex flex-col ${theme === 'dark' ? 'bg-black' : 'bg-gradient-to-br from-slate-50 to-slate-100'} relative overflow-hidden`}>
