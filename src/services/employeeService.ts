@@ -360,7 +360,11 @@ export const employeeService = {
     return { success: true, data: rows };
   },
 
-  async listOrgPayslips(orgId: string, userId?: string): Promise<ServiceResponse<EmployeePayslip[]>> {
+  async listOrgPayslips(
+    orgId: string,
+    actorId: string,
+    userId?: string,
+  ): Promise<ServiceResponse<EmployeePayslip[]>> {
     const ro = requireOrg(orgId);
     if (!ro.ok) {
       return { success: false, data: [], error: ro.error };
@@ -372,6 +376,11 @@ export const employeeService = {
     }
 
     await simulateDelay();
+
+    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) {
+      return { success: false, data: [], error: 'Insufficient role' };
+    }
+
     const rows = dataStore.payslips.filter(
       p => p.organizationId === ro.orgId && (!userId || p.userId === userId),
     );

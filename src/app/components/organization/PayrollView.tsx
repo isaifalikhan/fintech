@@ -35,13 +35,13 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
     [orgId],
     ['bankAccounts'],
   );
+  const actorId = user?.id ?? '';
   const { data: payslips, loading, error, refetch } = useServiceArray(
-    () => employeeService.listOrgPayslips(orgId),
-    [orgId],
+    () => employeeService.listOrgPayslips(orgId, actorId),
+    [orgId, actorId],
     ['payslips'],
   );
 
-  const actorId = user?.id ?? '';
   const issueMutation = useMutation(
     (data: Parameters<typeof employeeService.issuePayslip>[1]) =>
       employeeService.issuePayslip(orgId, data, actorId),
