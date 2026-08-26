@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import { PayrollView } from '../organization/PayrollView';
 
 type EnrichedOrg = Organization & PlatformOrgMeta;
 
@@ -66,6 +67,7 @@ export function OrganizationsView() {
 
   const [viewingOrg, setViewingOrg] = useState<EnrichedOrg | null>(null);
   const [managingOrg, setManagingOrg] = useState<EnrichedOrg | null>(null);
+  const [payrollOrg, setPayrollOrg] = useState<EnrichedOrg | null>(null);
   const [manageName, setManageName] = useState('');
   const [manageCurrency, setManageCurrency] = useState('');
   const [manageFiscalYearStart, setManageFiscalYearStart] = useState('');
@@ -358,6 +360,13 @@ export function OrganizationsView() {
                 >
                   <Settings className="size-4" /> Manage
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPayrollOrg(org)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-300 hover:bg-white/10 transition-colors"
+                >
+                  <FileText className="size-4" /> Payroll
+                </button>
               </div>
             </motion.div>
           );
@@ -447,6 +456,17 @@ export function OrganizationsView() {
               Save Changes
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payroll */}
+      <Dialog open={payrollOrg != null} onOpenChange={(open) => { if (!open) setPayrollOrg(null); }}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payroll — {payrollOrg?.name}</DialogTitle>
+            <DialogDescription>Issue and manage payslips for this organization's employees.</DialogDescription>
+          </DialogHeader>
+          {payrollOrg && <PayrollView orgId={payrollOrg.id} />}
         </DialogContent>
       </Dialog>
     </div>

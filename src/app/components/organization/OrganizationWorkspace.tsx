@@ -15,6 +15,7 @@ import { CostingPricing } from './CostingPricing';
 import { ReportsView } from './ReportsView';
 import { LoansView } from './LoansView';
 import { TeamPermissions } from './TeamPermissions';
+import { PayrollView } from './PayrollView';
 import { OrgSettings } from './OrgSettings';
 import { IntegrationsSettings } from './IntegrationsSettings';
 import { RecurringTransactions } from './RecurringTransactions';
@@ -49,7 +50,8 @@ export type OrgView =
   | 'loans' 
   | 'assets'
   | 'inventory'
-  | 'team' 
+  | 'team'
+  | 'payroll'
   | 'settings'
   | 'integrations'
   | 'active-sessions'
@@ -58,7 +60,7 @@ export type OrgView =
 const ALL_ORG_VIEWS: readonly OrgView[] = [
   'finance-os', 'dashboard', 'quick-add', 'transactions', 'recurring', 'accounts', 'payment-methods',
   'import', 'logic', 'ai-assistant', 'profit-intelligence', 'budgets', 'forecast', 'projects', 'simulator',
-  'costing', 'reports', 'loans', 'assets', 'inventory', 'team', 'settings', 'integrations',
+  'costing', 'reports', 'loans', 'assets', 'inventory', 'team', 'payroll', 'settings', 'integrations',
   'active-sessions', 'audit-log',
 ];
 
@@ -155,6 +157,8 @@ export function OrganizationWorkspace() {
         return <InventoryManagementView />;
       case 'team':
         return <TeamPermissions />;
+      case 'payroll':
+        return <PayrollView />;
       case 'settings':
         return <OrgSettings />;
       case 'integrations':
