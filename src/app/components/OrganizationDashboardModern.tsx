@@ -204,7 +204,7 @@ export function OrganizationDashboard() {
       case '1W':
         return tail(2);
       case '1M':
-        return tail(1);
+        return tail(2);
       case '3M':
         return tail(3);
       case '6M':

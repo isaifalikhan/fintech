@@ -3,7 +3,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useTheme } from '@/contexts/ThemeContext';
 // ── Phase 9A: Department profitability wired through service layer ────────────
 import { useOrgServices } from '@/hooks/useOrgServices';
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useService } from '@/hooks/useService';
+import { formatCurrency } from '@/lib/formatters';
 import type { DepartmentProfitability } from '@/services/types';
 
 /** Maps service DepartmentProfitability → local rendering shape */
@@ -118,6 +120,7 @@ const COLORS = ['#a855f7', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'
 export function ProfitIntelligenceView() {
   const { theme } = useTheme();
   const svc = useOrgServices();
+  const orgCurrency = useOrgCurrency();
 
   // ── Phase 9A: Department profitability from service ──────────────────────
   const {
@@ -273,6 +276,13 @@ export function ProfitIntelligenceView() {
             {deptProfitError} — department list and charts may be incomplete.
           </p>
         )}
+        {hasLiveDeptData && !deptProfitLoading && liveOverall?.totalRevenue === 0 && liveOverall?.totalDirectCost === 0 && (
+          <p className="mt-2 text-xs text-amber-200/90 font-mono" role="status">
+            Your department(s) exist but no transactions are assigned to one yet — profitability
+            below is genuinely $0, not a loading or display error. Assign a department to
+            transactions to see real figures here.
+          </p>
+        )}
       </motion.div>
 
       {/* Overall Metrics - Dashboard Style with Dark Cards + Colored Top Borders */}
@@ -327,7 +337,7 @@ export function ProfitIntelligenceView() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                PKR {Math.round(displayOverall.totalRevenue / 1000)}K
+                {formatCurrency(displayOverall.totalRevenue, orgCurrency, { compact: true })}
               </p>
               <p className="text-xs mt-1" style={{ color: theme === 'dark' ? '#64748b' : '#94a3b8' }}>{periodLabel}</p>
             </div>
@@ -385,7 +395,7 @@ export function ProfitIntelligenceView() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                PKR {Math.round(displayOverall.grossProfit / 1000)}K
+                {formatCurrency(displayOverall.grossProfit, orgCurrency, { compact: true })}
               </p>
               <p className="text-xs mt-1" style={{ color: theme === 'dark' ? '#64748b' : '#94a3b8' }}>
                 Margin: {displayOverall.grossMargin.toFixed(1)}% · {periodLabel}
@@ -445,7 +455,7 @@ export function ProfitIntelligenceView() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                PKR {Math.round(displayOverall.netProfit / 1000)}K
+                {formatCurrency(displayOverall.netProfit, orgCurrency, { compact: true })}
               </p>
               <p className="text-xs mt-1" style={{ color: theme === 'dark' ? '#64748b' : '#94a3b8' }}>
                 Margin: {displayOverall.netMargin.toFixed(1)}% · {periodLabel}
@@ -505,7 +515,7 @@ export function ProfitIntelligenceView() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                PKR {Math.round(displayOverall.totalOverhead / 1000)}K
+                {formatCurrency(displayOverall.totalOverhead, orgCurrency, { compact: true })}
               </p>
               <p className="text-xs mt-1" style={{ color: theme === 'dark' ? '#64748b' : '#94a3b8' }}>
                 {overheadSharePct.toFixed(1)}% of revenue · {periodLabel}
@@ -764,29 +774,29 @@ export function ProfitIntelligenceView() {
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Cost/Hour</p>
-                      <p className="font-bold text-white">PKR {dept.costPerHour.toLocaleString()}</p>
+                      <p className="font-bold text-white">{formatCurrency(dept.costPerHour, orgCurrency)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Revenue</p>
-                      <p className="font-bold text-green-400">PKR {(dept.monthlyRevenue / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-green-400">{formatCurrency(dept.monthlyRevenue, orgCurrency, { compact: true })}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Direct Cost</p>
-                      <p className="font-bold text-orange-400">PKR {(dept.monthlyCost / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-orange-400">{formatCurrency(dept.monthlyCost, orgCurrency, { compact: true })}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Overhead</p>
-                      <p className="font-bold text-purple-400">PKR {(dept.overheadAllocation / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-purple-400">{formatCurrency(dept.overheadAllocation, orgCurrency, { compact: true })}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Net Profit</p>
-                      <p className="font-bold text-cyan-400">PKR {(dept.monthlyProfit / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-cyan-400">{formatCurrency(dept.monthlyProfit, orgCurrency, { compact: true })}</p>
                     </div>
                   </div>
                   <div className="mt-3">
                     <div className="flex justify-between text-xs text-slate-400 mb-1">
                       <span>Billable Hours: {dept.billableHours} / {dept.totalHours}</span>
-                      <span>Avg Rate: PKR {dept.billableHours > 0 ? Math.round(dept.monthlyRevenue / dept.billableHours) : 0}/hr</span>
+                      <span>Avg Rate: {formatCurrency(dept.billableHours > 0 ? Math.round(dept.monthlyRevenue / dept.billableHours) : 0, orgCurrency)}/hr</span>
                     </div>
                   </div>
                 </motion.div>
@@ -863,16 +873,16 @@ export function ProfitIntelligenceView() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Quoted Amount</p>
-                      <p className="font-bold text-blue-400">PKR {(project.quotedAmount / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-blue-400">{formatCurrency(project.quotedAmount, orgCurrency, { compact: true })}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Actual Cost</p>
-                      <p className="font-bold text-orange-400">PKR {(project.actualCost / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-orange-400">{formatCurrency(project.actualCost, orgCurrency, { compact: true })}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400 mb-1">Actual Profit</p>
                       <p className={`font-bold ${project.actualProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        PKR {(project.actualProfit / 1000).toFixed(0)}K
+                        {formatCurrency(project.actualProfit, orgCurrency, { compact: true })}
                       </p>
                     </div>
                     <div>
@@ -1003,7 +1013,7 @@ export function ProfitIntelligenceView() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={(entry) => `${entry.category}: PKR ${(entry.amount / 1000).toFixed(0)}K`}
+                      label={(entry) => `${entry.category}: ${formatCurrency(entry.amount, orgCurrency, { compact: true })}`}
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="amount"
@@ -1066,7 +1076,7 @@ export function ProfitIntelligenceView() {
                   >
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="font-bold text-white">{overhead.category}</h4>
-                      <p className="font-bold text-orange-400">PKR {(overhead.amount / 1000).toFixed(0)}K</p>
+                      <p className="font-bold text-orange-400">{formatCurrency(overhead.amount, orgCurrency, { compact: true })}</p>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">{overhead.frequency}</span>
@@ -1134,14 +1144,14 @@ export function ProfitIntelligenceView() {
                         : 'bg-red-500/20 text-red-300 border border-red-400/30'
                     }`}
                   >
-                    Impact PKR {(scenario.impact / 1000).toFixed(0)}K
+                    Impact {formatCurrency(scenario.impact, orgCurrency, { compact: true })}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <p className="text-xs text-slate-400 mb-1">Projected profit</p>
-                    <p className="font-bold text-white">PKR {(scenario.projectedProfit / 1000).toFixed(0)}K</p>
+                    <p className="font-bold text-white">{formatCurrency(scenario.projectedProfit, orgCurrency, { compact: true })}</p>
                   </div>
                   <div>
                     <p className="text-xs text-slate-400 mb-1">Projected margin</p>
@@ -1151,7 +1161,7 @@ export function ProfitIntelligenceView() {
                     <p className="text-xs text-slate-400 mb-1">vs baseline</p>
                     <p className="font-bold text-cyan-400">
                       {scenario.projectedProfit >= displayOverall.netProfit ? '+' : ''}
-                      PKR {((scenario.projectedProfit - displayOverall.netProfit) / 1000).toFixed(0)}K
+                      {formatCurrency(scenario.projectedProfit - displayOverall.netProfit, orgCurrency, { compact: true })}
                     </p>
                   </div>
                 </div>
@@ -1209,7 +1219,7 @@ export function ProfitIntelligenceView() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={(entry) => `${entry.name}: PKR ${(entry.value / 1000).toFixed(0)}K`}
+                      label={(entry) => `${entry.name}: ${formatCurrency(entry.value, orgCurrency, { compact: true })}`}
                       outerRadius={100}
                       dataKey="value"
                     >
@@ -1231,35 +1241,35 @@ export function ProfitIntelligenceView() {
               <div className="space-y-4">
                 <div className="p-5 bg-blue-600/20 border border-blue-500/30 rounded-lg">
                   <h3 className="text-lg font-bold text-white mb-2">Business Expenses</h3>
-                  <p className="text-3xl font-bold text-blue-400 mb-2">PKR 1,890K</p>
+                  <p className="text-3xl font-bold text-blue-400 mb-2">{formatCurrency(1890000, orgCurrency, { compact: true })}</p>
                   <p className="text-sm text-blue-200">80.8% of total expenses</p>
                   <div className="mt-3 space-y-1 text-sm text-blue-100">
                     <div className="flex justify-between">
                       <span>Salaries & Wages</span>
-                      <span>PKR 1,200K</span>
+                      <span>{formatCurrency(1200000, orgCurrency, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Office & Tools</span>
-                      <span>PKR 420K</span>
+                      <span>{formatCurrency(420000, orgCurrency, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Marketing</span>
-                      <span>PKR 270K</span>
+                      <span>{formatCurrency(270000, orgCurrency, { compact: true })}</span>
                     </div>
                   </div>
                 </div>
                 <div className="p-5 bg-green-600/20 border border-green-500/30 rounded-lg">
                   <h3 className="text-lg font-bold text-white mb-2">Personal Expenses</h3>
-                  <p className="text-3xl font-bold text-green-400 mb-2">PKR 450K</p>
+                  <p className="text-3xl font-bold text-green-400 mb-2">{formatCurrency(450000, orgCurrency, { compact: true })}</p>
                   <p className="text-sm text-green-200">19.2% of total expenses</p>
                   <div className="mt-3 space-y-1 text-sm text-green-100">
                     <div className="flex justify-between">
                       <span>Owner Drawings</span>
-                      <span>PKR 300K</span>
+                      <span>{formatCurrency(300000, orgCurrency, { compact: true })}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Personal Tax</span>
-                      <span>PKR 150K</span>
+                      <span>{formatCurrency(150000, orgCurrency, { compact: true })}</span>
                     </div>
                   </div>
                 </div>
@@ -1298,16 +1308,16 @@ export function ProfitIntelligenceView() {
               <div className="p-6 bg-blue-600/20 border border-blue-500/30 rounded-lg">
                 <h3 className="text-sm text-blue-200 mb-2">Total Office Space</h3>
                 <p className="text-4xl font-bold text-white mb-1">2,800 sq ft</p>
-                <p className="text-sm text-blue-300">Monthly rent: PKR 200K</p>
+                <p className="text-sm text-blue-300">Monthly rent: {formatCurrency(200000, orgCurrency, { compact: true })}</p>
               </div>
               <div className="p-6 bg-green-600/20 border border-green-500/30 rounded-lg">
                 <h3 className="text-sm text-green-200 mb-2">Revenue per Sq Ft</h3>
-                <p className="text-4xl font-bold text-white mb-1">PKR 820</p>
+                <p className="text-4xl font-bold text-white mb-1">{formatCurrency(820, orgCurrency)}</p>
                 <p className="text-sm text-green-300">Per month</p>
               </div>
               <div className="p-6 bg-purple-600/20 border border-purple-500/30 rounded-lg">
                 <h3 className="text-sm text-purple-200 mb-2">Profit per Sq Ft</h3>
-                <p className="text-4xl font-bold text-white mb-1">PKR 66</p>
+                <p className="text-4xl font-bold text-white mb-1">{formatCurrency(66, orgCurrency)}</p>
                 <p className="text-sm text-purple-300">Net profit per month</p>
               </div>
             </div>
@@ -1337,7 +1347,7 @@ export function ProfitIntelligenceView() {
                       <p className="text-sm text-slate-400">{item.sqft} sq ft ({((item.sqft / 2800) * 100).toFixed(1)}% of total)</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-white">PKR {Math.round(item.revenue / item.sqft)}/sq ft</p>
+                      <p className="font-bold text-white">{formatCurrency(item.sqft > 0 ? Math.round(item.revenue / item.sqft) : 0, orgCurrency)}/sq ft</p>
                       <p className="text-sm text-slate-400">Monthly revenue</p>
                     </div>
                   </div>

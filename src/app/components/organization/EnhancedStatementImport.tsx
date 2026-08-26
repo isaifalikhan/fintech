@@ -597,7 +597,14 @@ export function EnhancedStatementImport({
       </motion.div>
 
       {/* Step Content */}
-      <AnimatePresence mode="wait">
+      {/* mode="wait" previously serialized step transitions behind the OLD step's exit
+          animation finishing. If that animation never completes (throttled/hidden tab,
+          reduced-motion settings, a GPU hiccup) the wizard looked permanently stuck on
+          "Processing file..." even though parsing had already succeeded and state had
+          already advanced — the next step's content just never mounted. Default (sync)
+          mode mounts the new step immediately; old and new steps cross-fade instead of
+          strictly sequencing. */}
+      <AnimatePresence>
         {currentStep === 'upload' && (
           <motion.div
             key="upload"
