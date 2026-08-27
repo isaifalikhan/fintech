@@ -114,6 +114,31 @@ export function exportBudgets(budgets: any[], options: Partial<ExportOptions> = 
   return { success: false, message: `${format.toUpperCase()} export not yet implemented` };
 }
 
+// Loan Export
+export function exportLoans(loans: any[], options: Partial<ExportOptions> = {}) {
+  const { format = 'csv', filename = 'loans' } = options;
+
+  const exportData = loans.map(loan => ({
+    Party: loan.party,
+    Type: loan.type,
+    Description: loan.description,
+    Principal: loan.principal,
+    Currency: loan.currency,
+    'Due Date': formatDate(loan.dueDate),
+    'Start Date': loan.startDate ? formatDate(loan.startDate) : '',
+    'Interest Rate': loan.interestRate != null ? loan.interestRate : '',
+    Status: loan.status
+  }));
+
+  const headers = ['Party', 'Type', 'Description', 'Principal', 'Currency', 'Due Date', 'Start Date', 'Interest Rate', 'Status'];
+
+  if (format === 'csv') {
+    return exportToCSV(exportData, headers, filename);
+  }
+
+  return { success: false, message: `${format.toUpperCase()} export not yet implemented` };
+}
+
 // Cash Flow Forecast Export
 export function exportForecast(forecastData: any[], options: Partial<ExportOptions> = {}) {
   const { format = 'csv', filename = 'cashflow-forecast' } = options;

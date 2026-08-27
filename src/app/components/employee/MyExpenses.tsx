@@ -11,12 +11,14 @@ import { employeeService } from '@/services/employeeService';
 import type { Expense } from '@/services/employeeService';
 import { useService, useMutation } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import {
   suggestCategoryFromNarration,
   findLikelyDuplicates,
   policyNotesForDraft,
   confidenceLabel,
 } from '@/lib/expenseAiAssistant';
+import { SUPPORTED_CURRENCIES } from '@/lib/currencies';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -51,23 +53,21 @@ const EXPENSE_CATEGORIES = [
   'Marketing', 'Utilities', 'Other',
 ];
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'SGD'];
-
 /** Keeps receipts small enough for local demo persistence (data URL in store). */
 const MAX_RECEIPT_FILE_BYTES = 1024 * 1024 * 1024;
 
-const EMPTY_FORM_BASE: Omit<ExpenseFormData, 'date'> = {
+const EMPTY_FORM_BASE: Omit<ExpenseFormData, 'date' | 'currency'> = {
   description: '',
   category: 'Meals & Entertainment',
   amount: '',
-  currency: 'USD',
   project: '',
   notes: '',
 };
 
-function freshExpenseForm(): ExpenseFormData {
+function freshExpenseForm(defaultCurrency: string): ExpenseFormData {
   return {
     ...EMPTY_FORM_BASE,
+    currency: defaultCurrency,
     date: new Date().toISOString().split('T')[0],
   };
 }
@@ -115,6 +115,7 @@ export function MyExpenses() {
   const { user, currentOrganization } = useAuth();
   const orgId  = currentOrganization?.id ?? 'org-001';
   const userId = user?.id ?? '';
+  const orgCurrency = useOrgCurrency();
 
   // ── Data ──
   const { data: serviceExpenses, loading, error, refetch } = useService(
@@ -136,7 +137,7 @@ export function MyExpenses() {
   const [filter,      setFilter]      = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm,    setShowForm]    = useState(false);
-  const [formData,    setFormData]    = useState<ExpenseFormData>(() => freshExpenseForm());
+  const [formData,    setFormData]    = useState<ExpenseFormData>(() => freshExpenseForm(orgCurrency));
   const [formError,   setFormError]   = useState('');
   const [toast,       setToast]       = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
   const expenseActionLockRef = useRef(false);
@@ -244,7 +245,7 @@ export function MyExpenses() {
   };
 
   const resetForm = () => {
-    setFormData(freshExpenseForm());
+    setFormData(freshExpenseForm(orgCurrency));
     setFormError('');
     setShowForm(false);
     clearReceiptAttachment();
@@ -394,7 +395,7 @@ export function MyExpenses() {
               onClick={() => {
                 setShowForm(v => !v);
                 setFormError('');
-                setFormData(freshExpenseForm());
+                setFormData(freshExpenseForm(orgCurrency));
                 clearReceiptAttachment();
               }}
               className="flex items-center gap-2 min-h-10 px-5 sm:px-6 py-2.5 rounded-xl text-white text-sm font-medium transition-all touch-manipulation"
@@ -535,7 +536,7 @@ export function MyExpenses() {
                     className="w-full px-4 py-3 rounded-lg text-sm font-mono"
                     style={inputStyle}
                   >
-                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {SUPPORTED_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
                   </select>
                 </FormInput>
 

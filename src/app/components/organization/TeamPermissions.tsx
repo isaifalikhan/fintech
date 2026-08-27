@@ -30,6 +30,7 @@ import {
 import { AXIOM } from '../../../styles/axiom-tokens';
 // Wired to organizationService for member management
 import { organizationService } from '@/services/organizationService';
+import { auditService } from '@/services/auditService';
 import { useServiceArray, useMutation } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/formatters';
@@ -125,13 +126,6 @@ const MEMBER_ROLE_SELECT: { value: MemberRole; label: string }[] = [
   { value: 'viewer', label: 'Viewer' },
 ];
 
-const activityLog = [
-  { id: '1', user: 'John Doe', action: 'Invited new member', details: 'david@acme.com', timestamp: '2026-02-08T15:30:00', type: 'invite' },
-  { id: '2', user: 'Jane Smith', action: 'Updated permissions', details: 'Added export_data permission', timestamp: '2026-02-07T14:20:00', type: 'permission' },
-  { id: '3', user: 'John Doe', action: 'Changed role', details: 'Mike Johnson → Accountant', timestamp: '2026-02-06T10:15:00', type: 'role' },
-  { id: '4', user: 'Mike Johnson', action: 'Logged in', details: 'From IP 192.168.1.101', timestamp: '2026-02-08T16:45:00', type: 'login' },
-];
-
 function mapOrgRoleToMemberRole(role: UserRole): MemberRole {
   switch (role) {
     case 'owner':
@@ -198,6 +192,15 @@ export function TeamPermissions() {
     ['organizationMembers'],
   );
 
+  const {
+    data: activityEntries,
+    refetch: refetchActivity,
+  } = useServiceArray(
+    () => auditService.getAll(orgId),
+    [orgId],
+    ['auditLogs'],
+  );
+
   const roleMutation = useMutation(
     (input: { userId: string; newRole: UserRole }) =>
       organizationService.updateMemberRole(orgId, input.userId, input.newRole),
@@ -239,6 +242,18 @@ export function TeamPermissions() {
       const res = await roleMutation.execute({ userId: member.id, newRole: newOrgRole });
       if (res.success) {
         toast.success(res.message ?? 'Role updated');
+        const nextLabel = MEMBER_ROLE_SELECT.find((opt) => opt.value === nextDisplay)?.label ?? nextDisplay;
+        void auditService.create({
+          organizationId: orgId,
+          userId: user?.id ?? '',
+          userName: user?.name ?? 'Unknown',
+          action: 'Changed role',
+          resource: 'organization_member',
+          resourceId: member.id,
+          details: `${member.name} → ${nextLabel}`,
+          ipAddress: '',
+          severity: 'info',
+        }).then(() => refetchActivity());
         await refetchMembers();
         if (user?.id === member.id && currentOrganization?.id) {
           switchOrganization(currentOrganization.id);
@@ -261,6 +276,17 @@ export function TeamPermissions() {
     const res = await inviteMutation.execute({ email, name: inviteName.trim(), role: orgRole });
     if (res.success) {
       toast.success(res.message ?? 'Member invited');
+      void auditService.create({
+        organizationId: orgId,
+        userId: user?.id ?? '',
+        userName: user?.name ?? 'Unknown',
+        action: 'Invited new member',
+        resource: 'organization_member',
+        resourceId: email,
+        details: `Invited ${email} as ${inviteRole}`,
+        ipAddress: '',
+        severity: 'info',
+      }).then(() => refetchActivity());
       setInviteDialogOpen(false);
       setInviteEmail('');
       setInviteName('');
@@ -903,44 +929,63 @@ export function TeamPermissions() {
             </motion.button>
           </div>
 
-          <div className="space-y-3">
-            {activityLog.map((activity) => (
-              <div
-                key={activity.id}
-                className="p-4 rounded-xl flex items-start gap-4"
-                style={AXIOM.containers.item}
-              >
-                <div 
-                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: activity.type === 'invite' ? AXIOM.iconBoxes.cyan :
-                               activity.type === 'permission' ? AXIOM.iconBoxes.purple :
-                               activity.type === 'role' ? AXIOM.iconBoxes.amber :
-                               AXIOM.iconBoxes.green,
-                    boxShadow: activity.type === 'invite' ? AXIOM.shadows.iconCyan :
-                              activity.type === 'permission' ? AXIOM.shadows.iconPurple :
-                              activity.type === 'role' ? AXIOM.shadows.iconAmber :
-                              AXIOM.shadows.iconGreen,
-                  }}
-                >
-                  {activity.type === 'invite' && <Mail className="size-5 text-white" />}
-                  {activity.type === 'permission' && <Shield className="size-5 text-white" />}
-                  {activity.type === 'role' && <Crown className="size-5 text-white" />}
-                  {activity.type === 'login' && <Activity className="size-5 text-white" />}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-white font-medium">{activity.user}</p>
-                      <p className="text-sm text-slate-400">{activity.action}</p>
-                      <p className="text-xs text-slate-500 mt-1">{activity.details}</p>
+          {activityEntries.length === 0 ? (
+            <div
+              className="p-10 rounded-2xl text-center text-slate-400 text-sm"
+              style={AXIOM.containers.item}
+            >
+              No activity yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activityEntries.map((entry) => {
+                const actionLower = entry.action.toLowerCase();
+                const category = actionLower.includes('invit')
+                  ? 'invite'
+                  : actionLower.includes('role')
+                  ? 'role'
+                  : actionLower.includes('permission')
+                  ? 'permission'
+                  : 'default';
+                return (
+                  <div
+                    key={entry.id}
+                    className="p-4 rounded-xl flex items-start gap-4"
+                    style={AXIOM.containers.item}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: category === 'invite' ? AXIOM.iconBoxes.cyan :
+                                   category === 'permission' ? AXIOM.iconBoxes.purple :
+                                   category === 'role' ? AXIOM.iconBoxes.amber :
+                                   AXIOM.iconBoxes.green,
+                        boxShadow: category === 'invite' ? AXIOM.shadows.iconCyan :
+                                  category === 'permission' ? AXIOM.shadows.iconPurple :
+                                  category === 'role' ? AXIOM.shadows.iconAmber :
+                                  AXIOM.shadows.iconGreen,
+                      }}
+                    >
+                      {category === 'invite' && <Mail className="size-5 text-white" />}
+                      {category === 'permission' && <Shield className="size-5 text-white" />}
+                      {category === 'role' && <Crown className="size-5 text-white" />}
+                      {category === 'default' && <Activity className="size-5 text-white" />}
                     </div>
-                    <span className="text-xs text-slate-500">{formatDateTime(activity.timestamp)}</span>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-white font-medium">{entry.userName}</p>
+                          <p className="text-sm text-slate-400">{entry.action}</p>
+                          <p className="text-xs text-slate-500 mt-1">{entry.details}</p>
+                        </div>
+                        <span className="text-xs text-slate-500">{formatDateTime(entry.timestamp)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </motion.div>
       )}
 

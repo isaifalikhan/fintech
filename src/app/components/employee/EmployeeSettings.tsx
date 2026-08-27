@@ -1,10 +1,55 @@
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { toast } from 'sonner';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { Settings, User, Bell, Shield, Globe, Palette, HelpCircle } from 'lucide-react';
 import { authService } from '@/services/authService';
 import { useAuth } from '@/contexts/AuthContext';
 import { employeeService } from '@/services/employeeService';
-import { useService } from '@/hooks/useService';
+import { organizationService } from '@/services/organizationService';
+import { useService, useServiceArray } from '@/hooks/useService';
+
+interface EmployeeSettingsState {
+  emailNotifications: boolean;
+  expenseApprovals: boolean;
+  timesheetReminders: boolean;
+  projectUpdates: boolean;
+  companyAnnouncements: boolean;
+  twoFactorAuth: boolean;
+  sessionTimeout: string;
+}
+
+const DEFAULT_SETTINGS: EmployeeSettingsState = {
+  emailNotifications: true,
+  expenseApprovals: true,
+  timesheetReminders: true,
+  projectUpdates: false,
+  companyAnnouncements: true,
+  twoFactorAuth: true,
+  sessionTimeout: '30 minutes',
+};
+
+const inputStyle = {
+  background: AXIOM.inputs.background,
+  border: AXIOM.inputs.border,
+  color: AXIOM.inputs.color,
+};
+
+const SESSION_TIMEOUT_OPTIONS = ['15 minutes', '30 minutes', '60 minutes', 'Never'];
+
+type ToggleKey = Exclude<keyof EmployeeSettingsState, 'sessionTimeout'>;
+
+type SettingsItem =
+  | { label: string; value: string; type: 'readonly' }
+  | { label: string; value: boolean; type: 'toggle'; key: ToggleKey }
+  | { label: string; value: string; type: 'select'; key: 'sessionTimeout' };
+
+interface SettingsSection {
+  title: string;
+  icon: typeof User;
+  color: string;
+  items: SettingsItem[];
+}
 
 export function EmployeeSettings() {
   const { user, currentOrganization } = useAuth();
@@ -15,23 +60,51 @@ export function EmployeeSettings() {
     [currentOrganization?.id, user?.id],
   );
 
-  const sections = [
+  const settingsKey = user?.id ? `employee-settings:${user.id}` : null;
+  const [settings, setSettings] = useState<EmployeeSettingsState>(() => {
+    if (settingsKey) {
+      try {
+        const stored = localStorage.getItem(settingsKey);
+        if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      } catch {
+        // Ignore malformed/blocked localStorage; fall back to defaults.
+      }
+    }
+    return DEFAULT_SETTINGS;
+  });
+
+  const toggleSetting = (key: ToggleKey) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleSave = () => {
+    if (settingsKey) {
+      try {
+        localStorage.setItem(settingsKey, JSON.stringify(settings));
+      } catch {
+        // Storage unavailable (e.g. private mode) — settings still hold for this session.
+      }
+    }
+    toast.success('Settings saved');
+  };
+
+  const sections: SettingsSection[] = [
     { title: 'Profile Settings', icon: User, color: 'blue', items: [
-      { label: 'Full Name', value: user?.name ?? '', type: 'text' },
-      { label: 'Email', value: user?.email ?? '', type: 'text' },
+      { label: 'Full Name', value: user?.name ?? '', type: 'readonly' },
+      { label: 'Email', value: user?.email ?? '', type: 'readonly' },
       { label: 'Department', value: summary?.department ?? '—', type: 'readonly' },
       { label: 'Position', value: summary?.position ?? '—', type: 'readonly' },
     ]},
     { title: 'Notification Preferences', icon: Bell, color: 'purple', items: [
-      { label: 'Email Notifications', value: true, type: 'toggle' },
-      { label: 'Expense Approvals', value: true, type: 'toggle' },
-      { label: 'Timesheet Reminders', value: true, type: 'toggle' },
-      { label: 'Project Updates', value: false, type: 'toggle' },
-      { label: 'Company Announcements', value: true, type: 'toggle' },
+      { label: 'Email Notifications', value: settings.emailNotifications, type: 'toggle', key: 'emailNotifications' },
+      { label: 'Expense Approvals', value: settings.expenseApprovals, type: 'toggle', key: 'expenseApprovals' },
+      { label: 'Timesheet Reminders', value: settings.timesheetReminders, type: 'toggle', key: 'timesheetReminders' },
+      { label: 'Project Updates', value: settings.projectUpdates, type: 'toggle', key: 'projectUpdates' },
+      { label: 'Company Announcements', value: settings.companyAnnouncements, type: 'toggle', key: 'companyAnnouncements' },
     ]},
     { title: 'Security', icon: Shield, color: 'green', items: [
-      { label: 'Two-Factor Authentication', value: true, type: 'toggle' },
-      { label: 'Session Timeout', value: '30 minutes', type: 'select' },
+      { label: 'Two-Factor Authentication', value: settings.twoFactorAuth, type: 'toggle', key: 'twoFactorAuth' },
+      { label: 'Session Timeout', value: settings.sessionTimeout, type: 'select', key: 'sessionTimeout' },
     ]},
   ];
 
@@ -71,17 +144,34 @@ export function EmployeeSettings() {
               }}>
                 <span className="text-sm text-slate-300 font-mono">{item.label}</span>
                 {item.type === 'toggle' ? (
-                  <div className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${item.value ? 'bg-blue-500/50' : 'bg-slate-700/50'}`}>
+                  <div
+                    role="switch"
+                    aria-checked={item.value}
+                    tabIndex={0}
+                    onClick={() => toggleSetting(item.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleSetting(item.key);
+                      }
+                    }}
+                    className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${item.value ? 'bg-blue-500/50' : 'bg-slate-700/50'}`}
+                  >
                     <div className={`absolute top-0.5 size-5 rounded-full transition-all ${item.value ? 'left-6 bg-blue-400' : 'left-0.5 bg-slate-500'}`} />
                   </div>
                 ) : item.type === 'readonly' ? (
                   <span className="text-sm text-slate-500 font-mono">{String(item.value)}</span>
                 ) : (
-                  <input
-                    type="text"
-                    defaultValue={String(item.value)}
-                    className="text-sm text-white font-mono text-right bg-transparent border-none outline-none w-48"
-                  />
+                  <select
+                    value={item.value}
+                    onChange={(e) => setSettings(prev => ({ ...prev, [item.key]: e.target.value }))}
+                    className="text-sm font-mono text-right rounded-lg px-3 py-1.5"
+                    style={inputStyle}
+                  >
+                    {SESSION_TIMEOUT_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
                 )}
               </div>
             ))}
@@ -95,7 +185,11 @@ export function EmployeeSettings() {
         transition={{ delay: 0.4 }}
         className="flex justify-end"
       >
-        <button className="px-8 py-3 rounded-xl text-white font-medium" style={AXIOM.buttons.action}>
+        <button
+          onClick={handleSave}
+          className="px-8 py-3 rounded-xl text-white font-medium"
+          style={AXIOM.buttons.action}
+        >
           Save Changes
         </button>
       </motion.div>
@@ -104,6 +198,26 @@ export function EmployeeSettings() {
 }
 
 export function EmployeeHelp() {
+  const { currentOrganization } = useAuth();
+  const orgId = currentOrganization?.id ?? '';
+  const { data: members, loading: membersLoading } = useServiceArray(
+    () => organizationService.getMembers(orgId),
+    [orgId],
+    ['organizationMembers'],
+  );
+
+  const adminEmail = useMemo(() => {
+    const owner = members.find(m => m.role === 'owner');
+    if (owner?.user?.email) return owner.user.email;
+    const admin = members.find(m => m.role === 'admin');
+    return admin?.user?.email ?? null;
+  }, [members]);
+
+  const handleContactSupport = () => {
+    if (!adminEmail) return;
+    window.location.href = `mailto:${adminEmail}?subject=${encodeURIComponent('Support request')}`;
+  };
+
   const faqs = [
     { q: 'How do I submit an expense claim?', a: 'Go to My Expenses and click "New Expense". Fill in the details, attach a receipt, and submit.' },
     { q: 'How do I log my hours?', a: 'Use the Timesheet page to either start the live timer or manually add time entries.' },
@@ -161,8 +275,14 @@ export function EmployeeHelp() {
         <HelpCircle className="size-12 text-blue-400 mx-auto mb-4" />
         <h3 className="text-white font-bold mb-2">Need More Help?</h3>
         <p className="text-sm text-slate-400 mb-4">Contact your HR department or IT support team</p>
-        <button className="px-6 py-3 rounded-xl text-white font-medium" style={AXIOM.buttons.action}>
-          Contact Support
+        <button
+          onClick={handleContactSupport}
+          disabled={!adminEmail}
+          title={!adminEmail ? 'No support contact found for this organization yet' : undefined}
+          className="px-6 py-3 rounded-xl text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          style={AXIOM.buttons.action}
+        >
+          {membersLoading ? 'Loading…' : 'Contact Support'}
         </button>
       </motion.div>
     </div>

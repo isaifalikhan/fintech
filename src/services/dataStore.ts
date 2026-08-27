@@ -30,6 +30,7 @@ import {
   upsertBundleToSupabase,
   seedBundleIfEmpty,
 } from '@/services/supabaseBundle';
+import type { AuditLogEntry } from '@/services/auditService';
 
 /** Re-export for services/tests that imported version from dataStore. */
 export { DATA_STORE_SCHEMA_VERSION };
@@ -108,6 +109,8 @@ class DataStore {
   cashFlowForecasts: CashFlowForecast[];
   activeSessions: ActiveSession[];
   notifications: Notification[];
+  /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory audit log. */
+  auditLogs: AuditLogEntry[] = [];
 
   expenses: EmployeeExpense[];
   payslips: EmployeePayslip[];

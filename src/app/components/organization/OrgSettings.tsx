@@ -28,9 +28,11 @@ import { toast } from 'sonner';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { organizationService } from '@/services/organizationService';
 import { departmentService } from '@/services/departmentService';
+import { SUPPORTED_CURRENCIES } from '@/lib/currencies';
 import { useMutation, useServiceArray, useService } from '@/hooks/useService';
 import type { Organization, Department as OrgDepartment } from '@/services/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ActiveSessionsView } from './ActiveSessionsView';
 import { AuditLogView } from './AuditLogView';
 import { DataExportCenter } from './DataExportCenter';
@@ -43,6 +45,8 @@ interface Currency {
   symbol: string;
   enabled: boolean;
 }
+
+const DEFAULT_ENABLED_CURRENCY_CODES = ['USD', 'PKR', 'AED'];
 
 interface Department {
   id: string;
@@ -60,14 +64,10 @@ interface FeatureToggle {
 }
 
 // Mock data
-const currencies: Currency[] = [
-  { code: 'USD', name: 'US Dollar', symbol: '$', enabled: true },
-  { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨', enabled: true },
-  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', enabled: true },
-  { code: 'EUR', name: 'Euro', symbol: '€', enabled: false },
-  { code: 'GBP', name: 'British Pound', symbol: '£', enabled: false },
-  { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', enabled: false },
-];
+const currencies: Currency[] = SUPPORTED_CURRENCIES.map(c => ({
+  ...c,
+  enabled: DEFAULT_ENABLED_CURRENCY_CODES.includes(c.code),
+}));
 
 const featureToggles: FeatureToggle[] = [
   {
@@ -194,6 +194,8 @@ export function OrgSettings() {
   const [notifTransaction, setNotifTransaction] = useState(true);
   const [notifBudget, setNotifBudget] = useState(true);
   const [notifReport, setNotifReport] = useState(false);
+  const [addDeptDialogOpen, setAddDeptDialogOpen] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
 
   useEffect(() => {
     if (!orgRecord) return;
@@ -281,16 +283,26 @@ export function OrgSettings() {
     toast.success('Currency removed');
   };
 
-  const addDepartment = async () => {
+  const addDepartment = async (name: string) => {
     if (!orgId) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error('Department name is required');
+      return;
+    }
     const res = await departmentService.create(orgId, {
-      name: `Department ${deptRows.length + 1}`,
+      name: trimmed,
       code: `D-${Date.now().toString(36)}`,
       costCenter: 'MAIN',
       isActive: true,
     });
-    if (res.success) toast.success('Department added');
-    else toast.error(res.error || 'Could not add department');
+    if (res.success) {
+      toast.success('Department added');
+      setAddDeptDialogOpen(false);
+      setNewDeptName('');
+    } else {
+      toast.error(res.error || 'Could not add department');
+    }
   };
 
   const removeDepartment = async (id: string) => {
@@ -563,7 +575,7 @@ export function OrgSettings() {
               type="button"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => void addDepartment()}
+              onClick={() => { setNewDeptName(''); setAddDeptDialogOpen(true); }}
               disabled={!canWrite || !orgId}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 disabled:opacity-50"
               style={AXIOM.buttons.secondary}
@@ -1084,6 +1096,52 @@ export function OrgSettings() {
           </motion.div>
         </div>
       )}
+
+      <Dialog open={addDeptDialogOpen} onOpenChange={setAddDeptDialogOpen}>
+        <DialogContent
+          className="max-w-md border-slate-700/80 text-slate-100"
+          style={{ background: 'rgba(15, 23, 42, 0.98)' }}
+        >
+          <DialogHeader>
+            <DialogTitle>Add Department</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Give the new department a name.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">Department name</label>
+              <input
+                type="text"
+                value={newDeptName}
+                onChange={(e) => setNewDeptName(e.target.value)}
+                placeholder="e.g. Marketing"
+                className="w-full rounded-xl px-3 py-2.5 text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border, color: AXIOM.inputs.color }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setAddDeptDialogOpen(false)}
+              className="rounded-xl px-4 py-2 text-sm font-medium"
+              style={AXIOM.buttons.secondary}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void addDepartment(newDeptName)}
+              disabled={!newDeptName.trim()}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
+              style={AXIOM.buttons.primary}
+            >
+              Create
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

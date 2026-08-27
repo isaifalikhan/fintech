@@ -787,17 +787,18 @@ export function AIFinancialAssistant() {
                   </div>
                 </div>
                 {insight.actionable && (
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-white ml-4"
+                  <button
+                    type="button"
+                    disabled
+                    title="Connect a live AI provider under AI Assistant → Integrations to enable actions on insights"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white/50 ml-4 cursor-not-allowed opacity-50"
                     style={{
                       background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3))',
                       border: '1px solid rgba(168, 85, 247, 0.5)',
                     }}
                   >
                     Take Action
-                  </motion.button>
+                  </button>
                 )}
               </div>
             </motion.div>

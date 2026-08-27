@@ -15,7 +15,7 @@ export function PlatformDashboard() {
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <PlatformHome />;
+        return <PlatformHome onNavigateToOrganizations={() => setCurrentView('organizations')} />;
       case 'organizations':
         return <OrganizationsView />;
       case 'plans':

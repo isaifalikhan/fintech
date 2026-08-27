@@ -26,6 +26,7 @@ export interface PlatformStats {
   suspendedOrgs: number;
   churnRiskOrgs: number;
   totalUsers: number;
+  newUsersThisMonth: number;
   statementsProcessed: number;
   platformProfit: number;
   platformCost: number;
@@ -153,6 +154,13 @@ export const platformService = {
     // Derive user count from dataStore
     const totalUsers = dataStore.users.length;
 
+    // Derive this-month signup count from dataStore
+    const now = new Date();
+    const newUsersThisMonth = dataStore.users.filter(u => {
+      const d = new Date(u.createdAt);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
+
     // Derive statement count from transactions as proxy
     const statementsProcessed = dataStore.transactions.length * 42; // scale factor for demo
 
@@ -166,6 +174,7 @@ export const platformService = {
         suspendedOrgs,
         churnRiskOrgs,
         totalUsers,
+        newUsersThisMonth,
         statementsProcessed,
         platformProfit: 980000,
         platformCost: 520000,

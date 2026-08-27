@@ -6,8 +6,8 @@
  * When `VITE_API_BASE_URL` is set, uses `GET /organizations/:orgId/audit-logs`; otherwise in-memory seed.
  */
 
-import { isHttpBackendConfigured, apiGet } from '@/lib/apiClient';
-import { simulateDelay } from './dataStore';
+import { isHttpBackendConfigured, apiGet, apiPostJson } from '@/lib/apiClient';
+import { dataStore, simulateDelay } from './dataStore';
 import type { ServiceResponse } from './types';
 
 export interface AuditLogEntry {
@@ -23,8 +23,6 @@ export interface AuditLogEntry {
   timestamp: string;
   severity: 'info' | 'warning' | 'critical';
 }
-
-const seedLogs: AuditLogEntry[] = [];
 
 const AUDIT = (organizationId: string) =>
   `/organizations/${encodeURIComponent(organizationId)}/audit-logs`;
@@ -58,7 +56,7 @@ export const auditService = {
     }
 
     await simulateDelay();
-    let logs = seedLogs.filter(l => l.organizationId === organizationId);
+    let logs = dataStore.auditLogs.filter(l => l.organizationId === organizationId);
     if (filters?.severity) logs = logs.filter(l => l.severity === filters.severity);
     if (filters?.action) logs = logs.filter(l => l.action === filters.action);
     if (filters?.search) {
@@ -66,5 +64,22 @@ export const auditService = {
       logs = logs.filter(l => l.details.toLowerCase().includes(q) || l.userName.toLowerCase().includes(q));
     }
     return { success: true, data: logs };
+  },
+
+  async create(
+    entry: Omit<AuditLogEntry, 'id' | 'timestamp'>,
+  ): Promise<ServiceResponse<AuditLogEntry>> {
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<typeof entry, AuditLogEntry>(AUDIT(entry.organizationId), entry);
+    }
+    await simulateDelay();
+    const log: AuditLogEntry = {
+      ...entry,
+      id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+    };
+    dataStore.auditLogs.unshift(log);
+    dataStore.notify('auditLogs');
+    return { success: true, data: log };
   },
 };

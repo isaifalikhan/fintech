@@ -42,6 +42,11 @@ export function createPlatformRouter(): Router {
     const suspendedOrgs = metaValues.filter(m => m.status === 'suspended').length;
     const churnRiskOrgs = metaValues.filter(m => m.status === 'churn_risk').length;
     const totalUsers = store.users.length;
+    const now = new Date();
+    const newUsersThisMonth = store.users.filter(u => {
+      const d = new Date(u.createdAt);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
     const statementsProcessed = store.transactions.length * 42;
 
     ok(res, {
@@ -52,6 +57,7 @@ export function createPlatformRouter(): Router {
       suspendedOrgs,
       churnRiskOrgs,
       totalUsers,
+      newUsersThisMonth,
       statementsProcessed,
       platformProfit: 980000,
       platformCost: 520000,
