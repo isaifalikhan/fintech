@@ -14,6 +14,7 @@ import type {
   TimesheetEntry,
   EmployeeTeamMember,
   CompanyAnnouncement,
+  UserRole,
 } from './types';
 
 export type Expense = EmployeeExpense;
@@ -127,19 +128,15 @@ function requireOrg(orgId: string): { ok: true; orgId: string } | { ok: false; e
 }
 
 /**
- * dataStore-mode-only guard: mirrors the server's `isPlatformUser` bypass + `requireOrgRole('owner',
- * 'admin')` (server/middleware/auth.ts) for payroll mutations. The HTTP backend already enforces this
- * server-side; dataStore mode has no per-request auth, so callers must pass the acting user's id and
- * we look their role up ourselves.
+ * dataStore-mode-only guard for payroll mutations: the HTTP backend already enforces owner/admin
+ * server-side (requireOrgRole); dataStore mode has no per-request auth, so callers pass the
+ * caller's already-resolved `userRole` (from `useAuth()`, which AuthContext derives correctly for
+ * both mock and Supabase sessions — including mapping platform_admin/manager to 'owner'/'admin').
+ * A dataStore lookup by `user.id` doesn't work here: in Supabase mode `user.id` is the real Auth
+ * UUID, not the mock `user-NNN` id that `dataStore.users`/`organizationMembers` are keyed by.
  */
-function isOwnerOrAdminForOrg(orgId: string, actorId: string): boolean {
-  const actor = dataStore.users.find(u => u.id === actorId);
-  if (!actor) return false;
-  if (actor.role === 'platform_admin' || actor.role === 'platform_manager') return true;
-  const membership = dataStore.organizationMembers.find(
-    m => m.userId === actorId && m.organizationId === orgId,
-  );
-  return membership?.role === 'owner' || membership?.role === 'admin';
+function isOwnerOrAdminRole(role: UserRole | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
 }
 
 const ME = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/me`;
@@ -362,7 +359,7 @@ export const employeeService = {
 
   async listOrgPayslips(
     orgId: string,
-    actorId: string,
+    actorRole: UserRole | null | undefined,
     userId?: string,
   ): Promise<ServiceResponse<EmployeePayslip[]>> {
     const ro = requireOrg(orgId);
@@ -377,7 +374,7 @@ export const employeeService = {
 
     await simulateDelay();
 
-    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) {
+    if (!isOwnerOrAdminRole(actorRole)) {
       return { success: false, data: [], error: 'Insufficient role' };
     }
 
@@ -398,7 +395,7 @@ export const employeeService = {
       deductions: { name: string; amount: number }[];
       bankAccountId: string;
     },
-    actorId: string,
+    actorRole: UserRole | null | undefined,
   ): Promise<ServiceResponse<EmployeePayslip>> {
     const fail = (error: string) =>
       ({ success: false, data: null as unknown as EmployeePayslip, error } as const);
@@ -423,7 +420,7 @@ export const employeeService = {
 
     await simulateDelay(200);
 
-    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) return fail('Insufficient role');
+    if (!isOwnerOrAdminRole(actorRole)) return fail('Insufficient role');
 
     const member = dataStore.teamMembers.find(m => m.id === data.userId && m.organizationId === ro.orgId);
     if (!member) return fail('Employee not found in this organization');
@@ -487,7 +484,11 @@ export const employeeService = {
     return { success: true, data: payslip, message: 'Payslip issued' };
   },
 
-  async voidPayslip(orgId: string, payslipId: string, actorId: string): Promise<ServiceResponse<null>> {
+  async voidPayslip(
+    orgId: string,
+    payslipId: string,
+    actorRole: UserRole | null | undefined,
+  ): Promise<ServiceResponse<null>> {
     const ro = requireOrg(orgId);
     if (!ro.ok) return { success: false, data: null, error: ro.error };
 
@@ -500,7 +501,7 @@ export const employeeService = {
 
     await simulateDelay(150);
 
-    if (!isOwnerOrAdminForOrg(ro.orgId, actorId)) {
+    if (!isOwnerOrAdminRole(actorRole)) {
       return { success: false, data: null, error: 'Insufficient role' };
     }
 

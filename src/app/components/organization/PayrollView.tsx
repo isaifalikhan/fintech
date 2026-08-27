@@ -21,7 +21,7 @@ interface DeductionRow {
 }
 
 export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
-  const { user, userRole, currentOrganization } = useAuth();
+  const { userRole, currentOrganization } = useAuth();
   const orgId = orgIdProp ?? currentOrganization?.id ?? '';
   const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
@@ -35,18 +35,17 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
     [orgId],
     ['bankAccounts'],
   );
-  const actorId = user?.id ?? '';
   const { data: payslips, loading, error, refetch } = useServiceArray(
-    () => employeeService.listOrgPayslips(orgId, actorId),
-    [orgId, actorId],
+    () => employeeService.listOrgPayslips(orgId, userRole),
+    [orgId, userRole],
     ['payslips'],
   );
 
   const issueMutation = useMutation(
     (data: Parameters<typeof employeeService.issuePayslip>[1]) =>
-      employeeService.issuePayslip(orgId, data, actorId),
+      employeeService.issuePayslip(orgId, data, userRole),
   );
-  const voidMutation = useMutation((id: string) => employeeService.voidPayslip(orgId, id, actorId));
+  const voidMutation = useMutation((id: string) => employeeService.voidPayslip(orgId, id, userRole));
 
   const [showForm, setShowForm] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
