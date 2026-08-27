@@ -51,6 +51,8 @@ export interface OrganizationMember {
   organizationId: string;
   role: UserRole;
   joinedAt: string;
+  /** Optional so pre-existing seed/mock rows without it still type-check and are treated as active. */
+  status?: 'active' | 'pending';
 }
 
 export interface Account {

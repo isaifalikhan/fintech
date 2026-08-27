@@ -65,7 +65,7 @@ export function createOrganizationRouter(): Router {
     const { userId, role } = req.body as { userId: string; role: OrganizationMember['role'] };
     const existing = store.organizationMembers.find(m => m.userId === userId && m.organizationId === orgId);
     if (existing) return fail(res, 409, 'User is already a member');
-    const member: OrganizationMember = { userId, organizationId: orgId, role, joinedAt: new Date().toISOString() };
+    const member: OrganizationMember = { userId, organizationId: orgId, role, joinedAt: new Date().toISOString(), status: 'active' };
     store.organizationMembers.push(member);
     store.persist();
     created(res, member, 'Member added');
@@ -124,7 +124,7 @@ export function createOrganizationRouter(): Router {
     const existing = store.organizationMembers.find(m => m.userId === user!.id && m.organizationId === orgId);
     if (existing) return fail(res, 409, 'That person is already a member of this organization');
 
-    const member: OrganizationMember = { userId: user.id, organizationId: orgId, role, joinedAt: new Date().toISOString() };
+    const member: OrganizationMember = { userId: user.id, organizationId: orgId, role, joinedAt: new Date().toISOString(), status: 'pending' };
     store.organizationMembers.push(member);
     store.persist();
 

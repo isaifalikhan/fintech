@@ -683,7 +683,10 @@ export const processCSVData = (
       const parsed = parseAmount(amountStr);
       if (parsed === null) continue;
       amount = Math.abs(parsed);
-      txnType = detectTransactionType(parsed, typeStr, mapping.amount);
+      // Pass the real CSV header text (e.g. "Withdrawal Amount"), not the internal
+      // `__idx_N` mapping key — detectTransactionType matches on header wording.
+      const amountHeaderText = amountIndex >= 0 ? headers[amountIndex] ?? '' : '';
+      txnType = detectTransactionType(parsed, typeStr, amountHeaderText);
     }
 
     if (!date || amount === null) {

@@ -141,6 +141,13 @@ export function createApiV1Router(): Router {
         : isPlatform ? store.organizations[0] || null : null;
     }
 
+    // Logging in is this demo app's only "accept invite" signal (no email-token flow exists) —
+    // flip a pending invite to active membership on first successful login.
+    if (membership?.status === 'pending') {
+      membership.status = 'active';
+      store.persist();
+    }
+
     const session = createSessionForUser(req, user, org);
     const token = signAuthToken({ sub: user.id, sid: session.id });
     setAuthCookie(res, token);

@@ -93,6 +93,12 @@ export const authService = {
           error: 'No access to this workspace',
         };
       }
+      // Logging in is this demo app's only "accept invite" signal (no email-token flow exists) —
+      // flip a pending invite to active membership on first successful login.
+      if (mem.status === 'pending') {
+        mem.status = 'active';
+        dataStore.notify('organizationMembers');
+      }
       return {
         success: true,
         data: {
@@ -105,6 +111,12 @@ export const authService = {
     }
 
     const membership = primaryMembershipForUser(user.id);
+    // Logging in is this demo app's only "accept invite" signal (no email-token flow exists) —
+    // flip a pending invite to active membership on first successful login.
+    if (membership?.status === 'pending') {
+      membership.status = 'active';
+      dataStore.notify('organizationMembers');
+    }
     const org = membership
       ? dataStore.organizations.find(o => o.id === membership.organizationId) || null
       : isPlatform

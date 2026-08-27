@@ -80,7 +80,9 @@ export function TransactionsLedger() {
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [editNarration, setEditNarration] = useState('');
+  const [editDepartmentId, setEditDepartmentId] = useState('');
   const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkDepartmentId, setBulkDepartmentId] = useState('');
 
   // ── Service wiring ───────────────────────────────────────────────────────
   const svc = useOrgServices();
@@ -101,6 +103,12 @@ export function TransactionsLedger() {
     () => svc.accounts.getBankAccounts(),
     [svc.orgId],
     ['bankAccounts'],
+  );
+
+  const { data: departments } = useServiceArray(
+    () => svc.departments.getAll(),
+    [svc.orgId],
+    ['departments'],
   );
 
   const categoryMap = useMemo(
@@ -142,6 +150,7 @@ export function TransactionsLedger() {
   useEffect(() => {
     if (editDialogOpen && selectedTransaction) {
       setEditNarration(String(selectedTransaction.narration ?? ''));
+      setEditDepartmentId(selectedTransaction.departmentId ?? '');
     }
   }, [editDialogOpen, selectedTransaction]);
 
@@ -210,6 +219,28 @@ export function TransactionsLedger() {
     }
   };
 
+  const handleApplyBulkDepartment = async () => {
+    if (selectedTransactions.length === 0) {
+      toast.error('Select transactions first.');
+      return;
+    }
+    const results = await Promise.all(
+      selectedTransactions.map((id) =>
+        svc.transactions.update(id, { departmentId: bulkDepartmentId || undefined }),
+      ),
+    );
+    const succeeded = results.filter((r) => r.success).length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`Updated department on ${succeeded} transaction(s)`);
+    }
+    if (failed > 0) {
+      toast.error(`Failed to update ${failed} transaction(s).`);
+    }
+    setSelectedTransactions([]);
+    setBulkEditDialogOpen(false);
+  };
+
   const handleBulkDelete = async () => {
     if (selectedTransactions.length === 0) return;
     if (
@@ -236,6 +267,7 @@ export function TransactionsLedger() {
     const res = await svc.transactions.update(selectedTransaction.id, {
       narration: text,
       description: text.slice(0, 200),
+      departmentId: editDepartmentId || undefined,
     });
     if (res.success) {
       toast.success('Transaction updated');
@@ -850,6 +882,24 @@ export function TransactionsLedger() {
             rows={5}
             className="w-full rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-purple-500/40"
           />
+          <div className="pt-3">
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Department</label>
+            <select
+              value={editDepartmentId}
+              onChange={(e) => setEditDepartmentId(e.target.value)}
+              className="h-11 w-full rounded-xl border border-slate-600 bg-slate-900/80 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-purple-500/40"
+            >
+              <option value="">Unassigned</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {!departments.length && (
+              <p className="mt-1.5 text-xs text-amber-200/90">Add departments under Settings first.</p>
+            )}
+          </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
@@ -900,14 +950,7 @@ export function TransactionsLedger() {
             {!categories.length && (
               <p className="text-xs text-amber-200/90">Add categories under Logic &amp; Learning first.</p>
             )}
-            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/40"
-                onClick={() => void handleBulkDelete()}
-              >
-                Delete selected
-              </button>
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"
@@ -915,6 +958,46 @@ export function TransactionsLedger() {
                 onClick={() => void handleApplyBulkCategory()}
               >
                 Apply category
+              </button>
+            </div>
+
+            <div className="border-t pt-3" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
+              <label className="text-sm font-medium text-slate-300">Department (optional)</label>
+              <select
+                value={bulkDepartmentId}
+                onChange={(e) => setBulkDepartmentId(e.target.value)}
+                disabled={!departments.length}
+                className="mt-1.5 h-11 w-full rounded-xl border border-slate-600 bg-slate-900 px-3 text-sm text-white disabled:opacity-50"
+              >
+                <option value="">Unassigned</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              {!departments.length && (
+                <p className="mt-1.5 text-xs text-amber-200/90">Add departments under Settings first.</p>
+              )}
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50"
+                  disabled={!departments.length}
+                  onClick={() => void handleApplyBulkDepartment()}
+                >
+                  Apply department
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:justify-end" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
+              <button
+                type="button"
+                className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-950/40"
+                onClick={() => void handleBulkDelete()}
+              >
+                Delete selected
               </button>
             </div>
           </div>
