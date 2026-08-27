@@ -55,6 +55,9 @@ export function InventoryManagementView() {
   const [addOpen, setAddOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // null = Add Item dialog is creating a new item; set = it's editing this item's id instead.
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [viewItem, setViewItem] = useState<(typeof inventoryItems)[number] | null>(null);
 
   const emptyItem = {
     sku: '', name: '', category: '', unit: 'unit',
@@ -74,31 +77,46 @@ export function InventoryManagementView() {
     return Number.isFinite(n) ? n : 0;
   };
 
-  const handleAddItem = async () => {
+  const handleSaveItem = async () => {
     if (!itemForm.name.trim()) return toast.error('Enter an item name.');
     if (!itemForm.sku.trim()) return toast.error('Enter a SKU.');
     setSaving(true);
-    const res = await svc.inventory.create({
-      sku: itemForm.sku.trim(),
-      name: itemForm.name.trim(),
-      category: itemForm.category.trim() || 'General',
-      unit: itemForm.unit.trim() || 'unit',
-      costingMethod: 'weighted_average',
-      currentStock: num(itemForm.currentStock),
-      reorderLevel: num(itemForm.reorderLevel),
-      reorderQuantity: num(itemForm.reorderQuantity),
-      averageCost: num(itemForm.averageCost),
-      lastCost: num(itemForm.averageCost),
-      sellingPrice: num(itemForm.sellingPrice),
-      assetAccountId: '',
-      cogsAccountId: '',
-      isActive: true,
-    } as any);
+
+    const res = editingItemId
+      ? await svc.inventory.update(editingItemId, {
+          sku: itemForm.sku.trim(),
+          name: itemForm.name.trim(),
+          category: itemForm.category.trim() || 'General',
+          unit: itemForm.unit.trim() || 'unit',
+          currentStock: num(itemForm.currentStock),
+          reorderLevel: num(itemForm.reorderLevel),
+          reorderQuantity: num(itemForm.reorderQuantity),
+          averageCost: num(itemForm.averageCost),
+          sellingPrice: num(itemForm.sellingPrice),
+        })
+      : await svc.inventory.create({
+          sku: itemForm.sku.trim(),
+          name: itemForm.name.trim(),
+          category: itemForm.category.trim() || 'General',
+          unit: itemForm.unit.trim() || 'unit',
+          costingMethod: 'weighted_average',
+          currentStock: num(itemForm.currentStock),
+          reorderLevel: num(itemForm.reorderLevel),
+          reorderQuantity: num(itemForm.reorderQuantity),
+          averageCost: num(itemForm.averageCost),
+          lastCost: num(itemForm.averageCost),
+          sellingPrice: num(itemForm.sellingPrice),
+          assetAccountId: '',
+          cogsAccountId: '',
+          isActive: true,
+        } as any);
+
     setSaving(false);
-    if (!res.success) return toast.error(res.error || 'Could not add item.');
-    toast.success(`"${itemForm.name.trim()}" added to inventory.`);
+    if (!res.success) return toast.error(res.error || (editingItemId ? 'Could not update item.' : 'Could not add item.'));
+    toast.success(editingItemId ? `"${itemForm.name.trim()}" updated.` : `"${itemForm.name.trim()}" added to inventory.`);
     setAddOpen(false);
     setItemForm(emptyItem);
+    setEditingItemId(null);
     await refetchItems();
   };
 
@@ -194,7 +212,7 @@ export function InventoryManagementView() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => { setItemForm(emptyItem); setAddOpen(true); }}
+              onClick={() => { setItemForm(emptyItem); setEditingItemId(null); setAddOpen(true); }}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={{
                 background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.4), rgba(59, 130, 246, 0.4))',
@@ -376,6 +394,12 @@ export function InventoryManagementView() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                // No separate purchase-order workflow exists in this app — restocking a
+                // low-stock item happens by recording a purchase against it directly.
+                setPurchaseForm({ ...emptyPurchase, inventoryItemId: lowStockItems[0]?.id || inventoryItems[0]?.id || '' });
+                setPurchaseOpen(true);
+              }}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 flex-shrink-0"
               style={{
                 background: 'rgba(251, 146, 60, 0.3)',
@@ -530,6 +554,7 @@ export function InventoryManagementView() {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
+                      onClick={() => setViewItem(item)}
                       className="flex-1 px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                       style={{ background: 'rgba(6, 182, 212, 0.1)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.3)' }}
                     >
@@ -539,6 +564,21 @@ export function InventoryManagementView() {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setItemForm({
+                          sku: item.sku,
+                          name: item.name,
+                          category: item.category,
+                          unit: item.unit,
+                          currentStock: String(item.currentStock),
+                          reorderLevel: String(item.reorderLevel),
+                          reorderQuantity: String(item.reorderQuantity),
+                          averageCost: String(item.averageCost),
+                          sellingPrice: String(item.sellingPrice),
+                        });
+                        setEditingItemId(item.id);
+                        setAddOpen(true);
+                      }}
                       className="flex-1 px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                       style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' }}
                     >
@@ -744,12 +784,14 @@ export function InventoryManagementView() {
         </div>
       )}
 
-      {/* Add Item */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* Add / Edit Item */}
+      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) setEditingItemId(null); }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add inventory item</DialogTitle>
-            <DialogDescription>Saved to this organization's inventory.</DialogDescription>
+            <DialogTitle>{editingItemId ? 'Edit inventory item' : 'Add inventory item'}</DialogTitle>
+            <DialogDescription>
+              {editingItemId ? "Updates this organization's inventory record." : "Saved to this organization's inventory."}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
             {([
@@ -757,7 +799,7 @@ export function InventoryManagementView() {
               ['SKU', 'sku', 'text', 'SKU-001'],
               ['Category', 'category', 'text', 'General'],
               ['Unit', 'unit', 'text', 'unit'],
-              ['Opening stock', 'currentStock', 'number', '0'],
+              [editingItemId ? 'Current stock' : 'Opening stock', 'currentStock', 'number', '0'],
               ['Reorder level', 'reorderLevel', 'number', '0'],
               ['Reorder quantity', 'reorderQuantity', 'number', '0'],
               [`Average cost (${orgCurrency})`, 'averageCost', 'number', '0'],
@@ -781,12 +823,51 @@ export function InventoryManagementView() {
               Cancel
             </button>
             <button
-              onClick={() => void handleAddItem()}
+              onClick={() => void handleSaveItem()}
               disabled={saving}
               className="px-6 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-50"
               style={AXIOM.buttons.success}
             >
-              {saving ? 'Saving…' : 'Add item'}
+              {saving ? 'Saving…' : editingItemId ? 'Save changes' : 'Add item'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Item */}
+      <Dialog open={!!viewItem} onOpenChange={(open) => { if (!open) setViewItem(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewItem?.name}</DialogTitle>
+            <DialogDescription>{viewItem?.sku} · {viewItem?.category}</DialogDescription>
+          </DialogHeader>
+          {viewItem && (
+            <div className="grid grid-cols-2 gap-3 py-2 text-sm">
+              {[
+                ['Current stock', `${viewItem.currentStock} ${viewItem.unit}`],
+                ['Reorder level', `${viewItem.reorderLevel} ${viewItem.unit}`],
+                ['Reorder quantity', `${viewItem.reorderQuantity} ${viewItem.unit}`],
+                ['Costing method', viewItem.costingMethod.replace('_', ' ')],
+                ['Average cost', formatCurrency(viewItem.averageCost, orgCurrency)],
+                ['Last cost', formatCurrency(viewItem.lastCost, orgCurrency)],
+                ['Selling price', formatCurrency(viewItem.sellingPrice, orgCurrency)],
+                ['Stock value', formatCurrency(viewItem.currentStock * viewItem.averageCost, orgCurrency)],
+                ['Status', viewItem.isActive ? 'Active' : 'Inactive'],
+              ].map(([label, value]) => (
+                <div key={label} className="p-3 rounded-xl" style={AXIOM.containers.item}>
+                  <div className="text-xs text-slate-500 mb-1">{label}</div>
+                  <div className="font-medium text-white capitalize">{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <button
+              onClick={() => setViewItem(null)}
+              className="px-4 py-2 rounded-lg text-slate-400 text-sm"
+              style={AXIOM.buttons.outline}
+            >
+              Close
             </button>
           </DialogFooter>
         </DialogContent>

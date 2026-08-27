@@ -74,7 +74,11 @@ All three fields are optional, so every existing seeded payslip (which has none 
 
 Run:
 ```bash
+<<<<<<< HEAD
 pnpm exec tsc --noEmit
+=======
+pnpm run build
+>>>>>>> worktree-admin-payslips
 ```
 Expected: no new errors (there may be pre-existing ones in this repo — compare the count/messages before and after this change; this step should add zero).
 
@@ -262,7 +266,11 @@ Then mount it next to the other org-scoped routers (around line 252, right after
 - [ ] **Step 3: Verify the server starts and type-checks**
 
 ```bash
+<<<<<<< HEAD
 pnpm exec tsc --noEmit
+=======
+pnpm run build
+>>>>>>> worktree-admin-payslips
 pnpm run dev:server
 ```
 Expected: no new type errors; server log shows it booted on port 3001 with no route-registration errors. Stop the server (Ctrl+C) once confirmed.
@@ -462,7 +470,11 @@ Note: `apiRequest` must already be imported at the top of the file (it is — li
 - [ ] **Step 3: Verify it type-checks**
 
 ```bash
+<<<<<<< HEAD
 pnpm exec tsc --noEmit
+=======
+pnpm run build
+>>>>>>> worktree-admin-payslips
 ```
 Expected: no new errors.
 
@@ -844,7 +856,11 @@ Import `Wallet2` (or reuse an already-imported icon like `DollarSign` if `Wallet
 - [ ] **Step 4: Verify it type-checks and the view renders**
 
 ```bash
+<<<<<<< HEAD
 pnpm exec tsc --noEmit
+=======
+pnpm run build
+>>>>>>> worktree-admin-payslips
 ```
 
 Then start the app and check in-browser (see Task 6 for the full flow) — at minimum:
@@ -921,7 +937,11 @@ Add this new `Dialog` block right after the existing `Manage` dialog (after its 
 - [ ] **Step 4: Verify it type-checks**
 
 ```bash
+<<<<<<< HEAD
 pnpm exec tsc --noEmit
+=======
+pnpm run build
+>>>>>>> worktree-admin-payslips
 ```
 Expected: no new errors.
 
