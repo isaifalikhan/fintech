@@ -1399,6 +1399,17 @@ export function EnhancedStatementImport({
               </div>
             </div>
 
+            {filteredTransactions.length === 0 && stats.total > 0 && stats.duplicates === stats.total && (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={AXIOM.containers.list}>
+                <AlertTriangle className="size-5 text-amber-400 shrink-0" />
+                <p className="text-sm text-amber-400/90">
+                  All {stats.total} {stats.total === 1 ? 'row' : 'rows'} in this file already{' '}
+                  {stats.total === 1 ? 'exists' : 'exist'} in your transactions — nothing new to
+                  import.
+                </p>
+              </div>
+            )}
+
             <div className="flex justify-between">
               <motion.button
                 whileHover={{ scale: 1.05 }}

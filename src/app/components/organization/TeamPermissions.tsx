@@ -157,7 +157,7 @@ function mapOrgMemberRowToTeamMember(
     name: u.name ?? '',
     email: u.email ?? '',
     role: displayRole,
-    status: 'active',
+    status: row.status ?? 'active',
     permissions: permissionsForDisplayRole(displayRole),
     organizationId: row.organizationId,
     joinedDate: row.joinedAt,
