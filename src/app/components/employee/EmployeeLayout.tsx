@@ -211,16 +211,21 @@ export function EmployeeLayout({ children, currentView, onViewChange }: Employee
 
           {/* Footer */}
           <div className="p-4" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)' }}>
-            <div className="p-3 rounded-lg" style={{
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1))',
-              border: '1px solid rgba(59, 130, 246, 0.2)',
-            }}>
+            <button
+              type="button"
+              onClick={() => selectView('ai')}
+              className="w-full text-left p-3 rounded-lg transition-all duration-200 cursor-pointer hover:brightness-110"
+              style={{
+                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1))',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+              }}
+            >
               <div className="flex items-center gap-2 mb-2">
                 <Brain className="size-4 text-blue-400" />
                 <span className="text-xs text-blue-400 font-mono">AI ASSISTANT</span>
               </div>
               <p className="text-xs text-slate-400 font-mono">Ask me anything</p>
-            </div>
+            </button>
           </div>
         </div>
 

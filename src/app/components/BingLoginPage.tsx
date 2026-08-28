@@ -8,9 +8,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Sparkles, Lock, Mail, ArrowLeft, Zap, Brain } from 'lucide-react';
 import { mockUsers, mockOrganizationMembers } from '@/data/mockDatabase';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface BingLoginPageProps {
   onLogin: (email: string, password: string) => Promise<void>;
+}
+
+/** Base redirect (`getRedirectPath()`) → the role's AI page, so the "AI-Powered Access" login
+ *  lands users directly on their AI tab instead of the generic dashboard. */
+export function mapToAiDestination(basePath: string): string {
+  switch (basePath) {
+    case '/platform':
+      return '/platform?view=ai';
+    case '/employee':
+      return '/employee?view=ai';
+    case '/dashboard':
+      return '/dashboard?view=ai-assistant';
+    default:
+      return basePath;
+  }
 }
 
 export function BingLoginPage({ onLogin }: BingLoginPageProps) {
@@ -20,8 +36,11 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
   const [error, setError] = useState('');
   const [scanProgress, setScanProgress] = useState(0);
   const [aiStatus, setAiStatus] = useState('Initializing AI...');
-  const navigate = useNavigate();
   const { theme } = useTheme();
+  // Post-login navigation to the role's AI destination happens at the route level (see
+  // `AppRoutes` in App.tsx) — as soon as `onLogin` resolves and the AuthContext `user` updates,
+  // this component's route swaps straight to a redirect element before any effect here would
+  // get a chance to run, so there is nothing to navigate from this component itself.
 
   useEffect(() => {
     if (isLoading && scanProgress < 100) {
@@ -46,7 +65,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
 
     try {
       await onLogin(email, password);
-      navigate('/');
+      // No navigate() here — the route swap in App.tsx handles landing on the AI destination.
     } catch (err) {
       setError('AI authentication failed. Please try again.');
     } finally {
@@ -66,7 +85,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
 
     try {
       await onLogin(demoEmail, 'demo');
-      navigate('/');
+      // No navigate() here — the route swap in App.tsx handles landing on the AI destination.
     } catch (err) {
       setError('Login failed.');
     } finally {
