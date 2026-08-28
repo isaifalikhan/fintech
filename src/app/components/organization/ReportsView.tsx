@@ -1656,15 +1656,18 @@ export function ReportsView() {
             style={AXIOM.containers.chartAmber}
           >
             <h4 className="text-lg font-bold text-white mb-4">Department Revenue vs Profit</h4>
+            {departmentChartRows.length === 0 ? (
+              <p className="text-slate-400 text-sm py-8 text-center">Nothing to chart for departments yet.</p>
+            ) : (
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={departmentChartRows}>
                 <CartesianGrid {...AXIOM.charts.grid} />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   {...AXIOM.charts.axis}
                   tick={{ fill: '#94a3b8' }}
                 />
-                <YAxis 
+                <YAxis
                   {...AXIOM.charts.axis}
                   tick={{ fill: '#94a3b8' }}
                   tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
@@ -1684,6 +1687,7 @@ export function ReportsView() {
                 <Bar dataKey="profit" fill={COLORS.amber} name="Profit" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </motion.div>
         </div>
       )}

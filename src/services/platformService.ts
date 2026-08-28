@@ -12,7 +12,7 @@
  * The service signatures stay the same.
  */
 
-import { isHttpBackendConfigured, apiGet } from '@/lib/apiClient';
+import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
 import { dataStore, simulateDelay } from './dataStore';
 import type { ServiceResponse } from './types';
 
@@ -66,6 +66,36 @@ export interface BillingStats {
   revenueGrowthPct: number;
   activeSubscriptions: number;
   overdueInvoices: number;
+}
+
+/**
+ * Platform-wide config edited from PlatformSettingsView. Field shape mirrors that page's
+ * controls exactly (currency codes, retention labels, backup selects, feature-flag names).
+ */
+export interface PlatformSettings {
+  /** Keyed by currency code shown on the page (PKR, USD, EUR, GBP, AED, CAD, AUD, SGD). */
+  enabledCurrencies: Record<string, boolean>;
+  dataRetention: {
+    transactionDataRetentionDays: number;
+    auditLogRetentionDays: number;
+    statementFilesRetentionDays: number;
+    deletedOrgDataRetentionDays: number;
+    autoDeleteExpiredData: boolean;
+  };
+  backup: {
+    fullBackupFrequency: 'Daily' | 'Weekly' | 'Monthly';
+    incrementalBackupFrequency: 'Hourly' | 'Every 6 hours' | 'Every 12 hours';
+    backupRetentionDays: number;
+  };
+  /** Keyed by the exact flag name shown on the page. */
+  featureFlags: Record<string, boolean>;
+}
+
+/** One manual-backup download event, recorded by "Trigger Manual Backup". */
+export interface BackupHistoryEntry {
+  id: string;
+  timestamp: string;
+  sizeBytes: number;
 }
 
 // ── Seed Data (replaces inline constants in 3 components) ───────────────────
@@ -127,6 +157,44 @@ const DEFAULT_ORG_META: PlatformOrgMeta = {
   limits: { users: 5, usersUsed: 1, statements: 100, statementsUsed: 0, currencies: 2, currenciesUsed: 1 },
   billing: { amount: 0 },
 };
+
+/** Defaults matching every control's initial state on PlatformSettingsView before any save. */
+export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
+  enabledCurrencies: {
+    PKR: true, USD: true, EUR: true, GBP: true, AED: true, CAD: true, AUD: true, SGD: true,
+  },
+  dataRetention: {
+    transactionDataRetentionDays: 730,
+    auditLogRetentionDays: 365,
+    statementFilesRetentionDays: 365,
+    deletedOrgDataRetentionDays: 90,
+    autoDeleteExpiredData: true,
+  },
+  backup: {
+    fullBackupFrequency: 'Daily',
+    incrementalBackupFrequency: 'Hourly',
+    backupRetentionDays: 30,
+  },
+  featureFlags: {
+    'AI-Powered Category Suggestions': true,
+    'Advanced What-If Simulations': true,
+    'API Access (Beta)': false,
+    'White Label Mode': false,
+    'Multi-Currency Auto-Convert': true,
+    'Export to QuickBooks': false,
+  },
+};
+
+function mergePlatformSettings(current: PlatformSettings, updates: Partial<PlatformSettings>): PlatformSettings {
+  return {
+    ...current,
+    ...updates,
+    enabledCurrencies: { ...current.enabledCurrencies, ...(updates.enabledCurrencies || {}) },
+    dataRetention: { ...current.dataRetention, ...(updates.dataRetention || {}) },
+    backup: { ...current.backup, ...(updates.backup || {}) },
+    featureFlags: { ...current.featureFlags, ...(updates.featureFlags || {}) },
+  };
+}
 
 // ── Service ─────────────────────────────────────────────────────────────────
 
@@ -273,5 +341,69 @@ export const platformService = {
         overdueInvoices: 3,
       },
     };
+  },
+
+  /**
+   * Platform-wide settings (currencies, data retention, backup policy, feature flags).
+   * When `VITE_API_BASE_URL` is set: `GET /platform/settings`.
+   */
+  async getSettings(): Promise<ServiceResponse<PlatformSettings>> {
+    if (isHttpBackendConfigured()) {
+      return apiGet<PlatformSettings>('/platform/settings');
+    }
+    await simulateDelay(80);
+    const existing = dataStore.platformSettings[0];
+    return { success: true, data: existing ? { ...existing } : { ...DEFAULT_PLATFORM_SETTINGS } };
+  },
+
+  /**
+   * Partial update of platform-wide settings (upserts the singleton row).
+   * When `VITE_API_BASE_URL` is set: `PATCH /platform/settings`.
+   */
+  async updateSettings(updates: Partial<PlatformSettings>): Promise<ServiceResponse<PlatformSettings>> {
+    if (isHttpBackendConfigured()) {
+      return apiRequest<PlatformSettings>('/platform/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    }
+    await simulateDelay(150);
+    const current = dataStore.platformSettings[0] || { ...DEFAULT_PLATFORM_SETTINGS };
+    const merged = mergePlatformSettings(current, updates);
+    dataStore.platformSettings[0] = merged;
+    dataStore.notify('platformSettings');
+    return { success: true, data: merged, message: 'Settings saved' };
+  },
+
+  /**
+   * Record a manual-backup download event. Session-only history (not persisted across reloads),
+   * mirroring `auditService.create` / `dataStore.auditLogs`.
+   * When `VITE_API_BASE_URL` is set: `POST /platform/backup-history`.
+   */
+  async recordBackup(sizeBytes: number): Promise<ServiceResponse<BackupHistoryEntry>> {
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<{ sizeBytes: number }, BackupHistoryEntry>('/platform/backup-history', { sizeBytes });
+    }
+    await simulateDelay();
+    const entry: BackupHistoryEntry = {
+      id: `backup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      sizeBytes,
+    };
+    dataStore.backupHistory.unshift(entry);
+    dataStore.notify('backupHistory');
+    return { success: true, data: entry };
+  },
+
+  /**
+   * List manual-backup history, newest first.
+   * When `VITE_API_BASE_URL` is set: `GET /platform/backup-history`.
+   */
+  async getBackupHistory(): Promise<ServiceResponse<BackupHistoryEntry[]>> {
+    if (isHttpBackendConfigured()) {
+      return apiGet<BackupHistoryEntry[]>('/platform/backup-history');
+    }
+    await simulateDelay();
+    return { success: true, data: [...dataStore.backupHistory] };
   },
 };

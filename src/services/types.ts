@@ -27,6 +27,18 @@ export interface Organization {
   settings: {
     theme: string;
     notifications: boolean;
+    /**
+     * Per-role custom permission catalog for the "Roles & Permissions" editor
+     * (`TeamPermissions.tsx`). Keyed by `MemberRole` string (`org_admin`,
+     * `team_member`, `accountant`, `viewer`); value is a list of permission ids
+     * from that file's `allPermissions`, or `['all']` for full access. Optional —
+     * falls back to the file's static `roleDefinitions` when unset.
+     *
+     * NOTE: this is a display/editing catalog only. It is NOT wired into
+     * `authService.hasPermission()`'s 3-level (`read`/`write`/`admin`) authorization
+     * check, which remains the actual enforcement mechanism app-wide.
+     */
+    rolePermissions?: Record<string, string[]>;
   };
 }
 

@@ -47,6 +47,29 @@ export function exportToCSV(data: any[], headers: string[], filename: string) {
   }
 }
 
+// Generic JSON download (mirrors exportToCSV's Blob + <a download> pattern)
+export function downloadJson(data: unknown, filename: string) {
+  try {
+    const jsonContent = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    return { success: true, message: 'JSON exported successfully' };
+  } catch (error) {
+    console.error('JSON export error:', error);
+    return { success: false, message: 'Failed to export JSON' };
+  }
+}
+
 // Transaction Export
 export function exportTransactions(transactions: any[], options: Partial<ExportOptions> = {}) {
   const { format = 'csv', filename = 'transactions', dateRange } = options;

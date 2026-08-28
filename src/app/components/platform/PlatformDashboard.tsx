@@ -5,8 +5,9 @@ import { PlatformHome } from './PlatformHome';
 import { OrganizationsView } from './OrganizationsView';
 import { PlansView } from './PlansView';
 import { PlatformSettingsView } from './PlatformSettingsView';
+import { PlatformAiPortal } from './PlatformAiPortal';
 
-type PlatformView = 'home' | 'organizations' | 'plans' | 'settings';
+type PlatformView = 'home' | 'organizations' | 'plans' | 'ai' | 'settings';
 
 export function PlatformDashboard() {
   const [currentView, setCurrentView] = useState<PlatformView>('home');
@@ -20,6 +21,8 @@ export function PlatformDashboard() {
         return <OrganizationsView />;
       case 'plans':
         return <PlansView />;
+      case 'ai':
+        return <PlatformAiPortal />;
       case 'settings':
         return <PlatformSettingsView />;
       default:

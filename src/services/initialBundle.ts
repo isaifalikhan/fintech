@@ -31,7 +31,7 @@ import {
 } from '@/data/mockDatabase';
 
 /** Keep in sync with persisted bundles (`localStorage` / SQLite / Supabase bundle). Bump when seed shape changes. */
-export const DATA_STORE_SCHEMA_VERSION = 4;
+export const DATA_STORE_SCHEMA_VERSION = 5;
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -64,6 +64,9 @@ export function buildPayloadFromMocks(): Record<string, unknown> {
     timesheets: deepClone(mockEmployeeTimesheets),
     teamMembers: deepClone(mockEmployeeTeamMembers),
     announcements: deepClone(mockCompanyAnnouncements),
+    // No mock seed — empty until an admin saves Platform Settings; services fall back to
+    // DEFAULT_PLATFORM_SETTINGS (see src/services/platformService.ts) when this is empty.
+    platformSettings: [],
   };
 }
 

@@ -37,9 +37,33 @@ const SERIALIZABLE_KEYS = [
   'overheadAllocations', 'recurringTransactions', 'budgets', 'loans', 'cashFlowForecasts',
   'activeSessions', 'notifications',
   'expenses', 'payslips', 'timesheets', 'teamMembers', 'announcements',
+  'platformSettings',
 ] as const;
 
 type SerializableKey = (typeof SERIALIZABLE_KEYS)[number];
+
+/**
+ * Platform-wide config edited from PlatformSettingsView (client duplicate: see
+ * `src/services/platformService.ts`'s `PlatformSettings` — this server copy follows the same
+ * duplication convention already used for `PlatformOrgMeta`/`PLANS` between client and
+ * `server/routes/platform.ts`, rather than importing across the client/server boundary).
+ */
+export interface PlatformSettings {
+  enabledCurrencies: Record<string, boolean>;
+  dataRetention: {
+    transactionDataRetentionDays: number;
+    auditLogRetentionDays: number;
+    statementFilesRetentionDays: number;
+    deletedOrgDataRetentionDays: number;
+    autoDeleteExpiredData: boolean;
+  };
+  backup: {
+    fullBackupFrequency: 'Daily' | 'Weekly' | 'Monthly';
+    incrementalBackupFrequency: 'Hourly' | 'Every 6 hours' | 'Every 12 hours';
+    backupRetentionDays: number;
+  };
+  featureFlags: Record<string, boolean>;
+}
 
 class ServerStore {
   organizations: Organization[] = [];
@@ -62,6 +86,8 @@ class ServerStore {
   cashFlowForecasts: CashFlowForecast[] = [];
   activeSessions: ActiveSession[] = [];
   notifications: Notification[] = [];
+  /** Singleton row (array-of-one) — mirrors the client dataStore's `platformSettings` field. */
+  platformSettings: PlatformSettings[] = [];
 
   expenses: EmployeeExpense[] = [];
   payslips: EmployeePayslip[] = [];

@@ -31,6 +31,7 @@ import {
   seedBundleIfEmpty,
 } from '@/services/supabaseBundle';
 import type { AuditLogEntry } from '@/services/auditService';
+import type { PlatformSettings } from '@/services/platformService';
 
 /** Re-export for services/tests that imported version from dataStore. */
 export { DATA_STORE_SCHEMA_VERSION };
@@ -63,6 +64,7 @@ const SERIALIZABLE_KEYS = [
   'overheadAllocations', 'recurringTransactions', 'budgets', 'loans', 'cashFlowForecasts',
   'activeSessions', 'notifications',
   'expenses', 'payslips', 'timesheets', 'teamMembers', 'announcements',
+  'platformSettings',
 ] as const;
 
 type SerializableKey = (typeof SERIALIZABLE_KEYS)[number];
@@ -111,6 +113,14 @@ class DataStore {
   notifications: Notification[];
   /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory audit log. */
   auditLogs: AuditLogEntry[] = [];
+  /**
+   * Singleton row (array-of-one), matching the array-based collection pattern — the
+   * hydrate/persist loop assumes arrays. In SERIALIZABLE_KEYS, so unlike auditLogs/backupHistory
+   * this SHOULD persist across reloads.
+   */
+  platformSettings: PlatformSettings[] = [];
+  /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory backup-history log, same reasoning as auditLogs above. */
+  backupHistory: { id: string; timestamp: string; sizeBytes: number }[] = [];
 
   expenses: EmployeeExpense[];
   payslips: EmployeePayslip[];
@@ -175,6 +185,11 @@ class DataStore {
       payload[k] = deepClone((this as unknown as Record<string, unknown>)[k]);
     }
     return { schemaVersion: DATA_STORE_SCHEMA_VERSION, payload };
+  }
+
+  /** Public snapshot of the full bundle (all real data collections) — used for manual backup downloads. */
+  getSnapshot(): { schemaVersion: number; payload: Record<string, unknown> } {
+    return this.getBundleObject();
   }
 
   private writePersistBundle(): void {

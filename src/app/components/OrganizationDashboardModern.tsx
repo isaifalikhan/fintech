@@ -116,6 +116,11 @@ export function OrganizationDashboard() {
     error: txnError,
     refetch: refetchTxns,
   } = useService(() => svc.transactions.getAll({ pageSize: 20 }), [svc.orgId]);
+  const { data: deptProfitability } = useServiceArray(
+    () => svc.departments.getProfitability(),
+    [svc.orgId],
+    ['departments', 'transactions'],
+  );
 
   const refreshDashboard = () => {
     void refetchAccounts();
@@ -215,13 +220,12 @@ export function OrganizationDashboard() {
     }
   }, [profitDataFull, selectedPeriod]);
 
-  const departmentData = Array.from({ length: 12 }, (_, i) => ({
-    name: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
-    Development: 1500000 + Math.sin(i * 0.5) * 400000 + i * 120000,
-    Design: 800000 + Math.cos(i * 0.7) * 250000 + i * 80000,
-    Marketing: 600000 + Math.sin(i * 0.3) * 200000 + i * 60000,
-    Sales: 1000000 + Math.cos(i * 0.6) * 300000 + i * 90000,
-  }));
+  /** Current per-department revenue snapshot — real data, not a fabricated monthly trend
+      (no monthly-by-department breakdown exists anywhere in this app to draw one honestly). */
+  const departmentData = useMemo(
+    () => (deptProfitability ?? []).map((d) => ({ name: d.departmentName, Revenue: d.revenue })),
+    [deptProfitability],
+  );
 
   // Expense category data for donut chart
   const expenseCategoryData = [
@@ -652,17 +656,25 @@ export function OrganizationDashboard() {
                 iconColor="purple"
                 delay={0.5}
               >
-                <ModernBarChart
-                  data={departmentData.slice(6)} // Last 6 months
-                  dataKeys={[
-                    { key: 'Development', color: MODERN_COLORS.primary, name: 'Development' },
-                    { key: 'Design', color: MODERN_COLORS.secondary, name: 'Design' },
-                    { key: 'Marketing', color: MODERN_COLORS.warning, name: 'Marketing' },
-                    { key: 'Sales', color: MODERN_COLORS.success, name: 'Sales' },
-                  ]}
-                  height={280}
-                  stacked={true}
-                />
+                {departmentData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center gap-2 px-4" style={{ height: 280 }}>
+                    <Users className="size-8 text-slate-500" />
+                    <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                      No departments yet
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-xs">
+                      Add departments under Settings, then assign them to transactions to see revenue by department here.
+                    </p>
+                  </div>
+                ) : (
+                  <ModernBarChart
+                    data={departmentData}
+                    dataKeys={[
+                      { key: 'Revenue', color: MODERN_COLORS.primary, name: 'Revenue' },
+                    ]}
+                    height={280}
+                  />
+                )}
               </ChartContainer>
 
               {/* Expense Categories - Donut Chart */}

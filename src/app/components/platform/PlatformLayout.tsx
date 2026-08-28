@@ -27,6 +27,7 @@ export function PlatformLayout({ children, currentView, onViewChange }: Platform
     { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'organizations', label: 'Organizations', icon: Building2 },
     { id: 'plans', label: 'Plans & Billing', icon: CreditCard },
+    { id: 'ai', label: 'AI Portal', icon: Brain },
     { id: 'settings', label: 'Platform Settings', icon: Settings },
   ];
 

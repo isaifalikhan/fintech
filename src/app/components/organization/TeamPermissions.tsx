@@ -139,7 +139,18 @@ function mapOrgRoleToMemberRole(role: UserRole): MemberRole {
   }
 }
 
-function permissionsForDisplayRole(role: MemberRole): string[] {
+/**
+ * A member's effective permission list for display purposes.
+ * Reads from the live `rolePermissions` editor state (see `TeamPermissions`'s
+ * `rolePermissions` state, seeded from/persisted to
+ * `Organization.settings.rolePermissions`) when available, so this stays in
+ * sync with whatever was last saved in the "Roles & Permissions" tab instead
+ * of silently diverging from it. Falls back to these hardcoded defaults only
+ * before that state is available.
+ */
+function permissionsForDisplayRole(role: MemberRole, rolePermissions?: Record<string, string[]>): string[] {
+  const saved = rolePermissions?.[role];
+  if (saved) return saved;
   if (role === 'org_admin') return ['all'];
   if (role === 'team_member') return ['add_transaction', 'view_reports', 'export_data'];
   return ['view_dashboard', 'view_reports'];
@@ -148,6 +159,7 @@ function permissionsForDisplayRole(role: MemberRole): string[] {
 /** `getMembers` returns org rows with nested `user`; UI expects flat `TeamMember`. */
 function mapOrgMemberRowToTeamMember(
   row: OrganizationMember & { user?: User | null },
+  rolePermissions?: Record<string, string[]>,
 ): TeamMember | null {
   const u = row.user;
   if (!u) return null;
@@ -158,12 +170,23 @@ function mapOrgMemberRowToTeamMember(
     email: u.email ?? '',
     role: displayRole,
     status: row.status ?? 'active',
-    permissions: permissionsForDisplayRole(displayRole),
+    permissions: permissionsForDisplayRole(displayRole, rolePermissions),
     organizationId: row.organizationId,
     joinedDate: row.joinedAt,
     avatar: u.avatar,
     orgRole: row.role,
   };
+}
+
+/**
+ * Expands the `['all']` sentinel (used by `roleDefinitions`'s org_admin entry)
+ * into the full permission-id list so per-permission checkbox UIs have a
+ * concrete set to check against, instead of every box reading as unchecked.
+ */
+function effectivePermissionIds(roleId: string, rolePermissions: Record<string, string[]>): string[] {
+  const list = rolePermissions[roleId];
+  if (!list) return [];
+  return list.includes('all') ? allPermissions.map((p) => p.id) : list;
 }
 
 /** Maps UI role to persisted `UserRole`, preserving `owner` when the member is org owner. */
@@ -211,6 +234,33 @@ export function TeamPermissions() {
       organizationService.inviteMember(orgId, input.email, input.role, input.name),
   );
 
+  // Per-org custom permission catalog for the "Roles & Permissions" editor below.
+  // Seeded from the persisted org setting if present, else from the static role
+  // definitions. Persisted via `organizationService.update()` -> `settings.rolePermissions`.
+  const [rolePermissions, setRolePermissions] = React.useState<Record<string, string[]>>(() => {
+    const saved = currentOrganization?.settings?.rolePermissions;
+    if (saved) return saved;
+    return Object.fromEntries(roleDefinitions.map(r => [r.id, r.permissions]));
+  });
+
+  // Re-sync when `currentOrganization` (re)loads with a persisted value — e.g. on
+  // first mount before auth/org data has arrived, or after switching orgs.
+  React.useEffect(() => {
+    const saved = currentOrganization?.settings?.rolePermissions;
+    if (saved) setRolePermissions(saved);
+  }, [currentOrganization]);
+
+  const rolePermissionsMutation = useMutation(
+    (input: { rolePermissions: Record<string, string[]> }) =>
+      organizationService.update(orgId, {
+        settings: {
+          theme: currentOrganization?.settings?.theme ?? 'dark',
+          notifications: currentOrganization?.settings?.notifications ?? true,
+          rolePermissions: input.rolePermissions,
+        },
+      }),
+  );
+
   const [activeView, setActiveView] = React.useState<TeamView>('members');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [filterRole, setFilterRole] = React.useState<string>('all');
@@ -219,11 +269,32 @@ export function TeamPermissions() {
   const [inviteEmail, setInviteEmail] = React.useState('');
   const [inviteName, setInviteName] = React.useState('');
   const [inviteRole, setInviteRole] = React.useState<MemberRole>('team_member');
+  const [editingRoleId, setEditingRoleId] = React.useState<MemberRole | null>(null);
 
   const teamMembers = React.useMemo(
-    () => orgMemberRows.map(mapOrgMemberRowToTeamMember).filter((m): m is TeamMember => m != null),
-    [orgMemberRows],
+    () =>
+      orgMemberRows
+        .map((row) => mapOrgMemberRowToTeamMember(row, rolePermissions))
+        .filter((m): m is TeamMember => m != null),
+    [orgMemberRows, rolePermissions],
   );
+
+  /** Toggle one permission for one role, optimistically, then persist and roll back on failure. */
+  const toggleRolePermission = async (roleId: MemberRole, permissionId: string) => {
+    const previous = rolePermissions;
+    const currentIds = effectivePermissionIds(roleId, rolePermissions);
+    const has = currentIds.includes(permissionId);
+    const nextIds = has ? currentIds.filter((id) => id !== permissionId) : [...currentIds, permissionId];
+    const next = { ...rolePermissions, [roleId]: nextIds };
+    setRolePermissions(next);
+    const res = await rolePermissionsMutation.execute({ rolePermissions: next });
+    if (res.success) {
+      toast.success('Permissions updated');
+    } else {
+      setRolePermissions(previous);
+      toast.error(res.error ?? 'Could not update permissions');
+    }
+  };
 
   const roleMemberCounts = React.useMemo(() => {
     const counts: Partial<Record<MemberRole, number>> = {};
@@ -802,55 +873,115 @@ export function TeamPermissions() {
                   </span>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500 font-medium uppercase">Permissions</p>
-                  {role.permissions.includes('all') ? (
-                    <div className="p-3 rounded-lg" style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                      <div className="flex items-center gap-2">
-                        <Unlock className="size-4 text-purple-400" />
-                        <span className="text-sm text-purple-400 font-medium">Full Access - All Permissions</span>
+                {(() => {
+                  const roleIds = effectivePermissionIds(role.id, rolePermissions);
+                  const isEditing = editingRoleId === role.id;
+                  const isFullAccess = (rolePermissions[role.id] ?? []).includes('all');
+
+                  if (isEditing) {
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 font-medium uppercase">
+                          Permissions ({roleIds.length}/{allPermissions.length})
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {allPermissions.map((permission) => {
+                            const checked = roleIds.includes(permission.id);
+                            const inputId = `perm-${role.id}-${permission.id}`;
+                            return (
+                              <label
+                                key={permission.id}
+                                htmlFor={inputId}
+                                className="p-2 rounded-lg text-xs flex items-center gap-2 cursor-pointer"
+                                style={AXIOM.containers.item}
+                              >
+                                <input
+                                  id={inputId}
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={rolePermissionsMutation.loading}
+                                  onChange={() => void toggleRolePermission(role.id, permission.id)}
+                                  className="size-4 rounded border-2 border-white/20 bg-slate-800 checked:bg-cyan-500 checked:border-cyan-500 cursor-pointer disabled:opacity-50"
+                                />
+                                <span className="text-slate-300">{permission.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      {role.permissions.slice(0, 6).map((perm) => {
-                        const permission = allPermissions.find(p => p.id === perm);
-                        if (!permission) return null;
-                        return (
-                          <div
-                            key={perm}
-                            className="p-2 rounded-lg text-xs flex items-center gap-2"
-                            style={AXIOM.containers.item}
-                          >
-                            <CheckCircle className="size-3 text-green-400" />
-                            <span className="text-slate-300">{permission.name}</span>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500 font-medium uppercase">Permissions</p>
+                      {isFullAccess ? (
+                        <div className="p-3 rounded-lg" style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                          <div className="flex items-center gap-2">
+                            <Unlock className="size-4 text-purple-400" />
+                            <span className="text-sm text-purple-400 font-medium">Full Access - All Permissions</span>
                           </div>
-                        );
-                      })}
-                      {role.permissions.length > 6 && (
-                        <div className="p-2 rounded-lg text-xs flex items-center gap-2" style={AXIOM.containers.item}>
-                          <span className="text-cyan-400">+{role.permissions.length - 6} more</span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {roleIds.slice(0, 6).map((permId) => {
+                            const permission = allPermissions.find(p => p.id === permId);
+                            if (!permission) return null;
+                            return (
+                              <div
+                                key={permId}
+                                className="p-2 rounded-lg text-xs flex items-center gap-2"
+                                style={AXIOM.containers.item}
+                              >
+                                <CheckCircle className="size-3 text-green-400" />
+                                <span className="text-slate-300">{permission.name}</span>
+                              </div>
+                            );
+                          })}
+                          {roleIds.length > 6 && (
+                            <div className="p-2 rounded-lg text-xs flex items-center gap-2" style={AXIOM.containers.item}>
+                              <span className="text-cyan-400">+{roleIds.length - 6} more</span>
+                            </div>
+                          )}
+                          {roleIds.length === 0 && (
+                            <div className="p-2 rounded-lg text-xs col-span-2" style={AXIOM.containers.item}>
+                              <span className="text-slate-500">No permissions assigned</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   className="w-full mt-4 px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
                   style={AXIOM.buttons.secondary}
-                  onClick={() => toast.success('Edit role permissions')}
+                  onClick={() => setEditingRoleId(editingRoleId === role.id ? null : role.id)}
                 >
-                  <Edit className="size-4" />
-                  Edit Role
+                  {editingRoleId === role.id ? (
+                    <>
+                      <CheckCircle className="size-4" />
+                      Done
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="size-4" />
+                      Edit Role
+                    </>
+                  )}
                 </motion.button>
               </motion.div>
             ))}
           </div>
 
-          {/* All Permissions Matrix */}
+          {/* All Permissions Matrix.
+              Read-only by design: this is a summary cross-referencing every permission
+              against every role, driven by the same `rolePermissions` state as the cards
+              above. Actual editing happens per-role via "Edit Role" on those cards —
+              editing a 12x4 grid inline here would be much fussier UX for no real gain. */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -858,51 +989,55 @@ export function TeamPermissions() {
             className="p-6 rounded-2xl"
             style={AXIOM.containers.list}
           >
-            <h3 className="text-xl font-bold text-white mb-4">All Permissions</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {allPermissions.map((permission) => {
-                const Icon = permission.icon;
-                return (
-                  <div
-                    key={permission.id}
-                    className="p-4 rounded-xl"
-                    style={AXIOM.containers.item}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div 
-                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{
-                          background: permission.category === 'financial' ? AXIOM.iconBoxes.green :
-                                     permission.category === 'team' ? AXIOM.iconBoxes.purple :
-                                     permission.category === 'settings' ? AXIOM.iconBoxes.amber :
-                                     AXIOM.iconBoxes.cyan,
-                        }}
-                      >
-                        <Icon className="size-4 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-white">{permission.name}</p>
-                        <p className="text-xs text-slate-400 mt-1">{permission.description}</p>
-                        <span 
-                          className="inline-block mt-2 px-2 py-1 rounded text-xs"
-                          style={{
-                            background: permission.category === 'financial' ? 'rgba(16, 185, 129, 0.1)' :
-                                       permission.category === 'team' ? 'rgba(168, 85, 247, 0.1)' :
-                                       permission.category === 'settings' ? 'rgba(245, 158, 11, 0.1)' :
-                                       'rgba(6, 182, 212, 0.1)',
-                            color: permission.category === 'financial' ? '#10b981' :
-                                  permission.category === 'team' ? '#a855f7' :
-                                  permission.category === 'settings' ? '#f59e0b' :
-                                  '#06b6d4',
-                          }}
-                        >
-                          {permission.category}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <h3 className="text-xl font-bold text-white mb-1">All Permissions</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              What each role currently grants. Edit a role's permissions from its card above.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr>
+                    <th className="text-left text-xs text-slate-500 font-medium uppercase pb-3 pr-4">
+                      Permission
+                    </th>
+                    {roleDefinitions.map((role) => (
+                      <th key={role.id} className="text-center text-xs text-slate-400 font-medium pb-3 px-3 whitespace-nowrap">
+                        {role.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPermissions.map((permission) => {
+                    const Icon = permission.icon;
+                    return (
+                      <tr key={permission.id} style={{ borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-2">
+                            <Icon className="size-4 text-slate-400 flex-shrink-0" />
+                            <div>
+                              <p className="text-slate-200">{permission.name}</p>
+                              <p className="text-xs text-slate-500">{permission.description}</p>
+                            </div>
+                          </div>
+                        </td>
+                        {roleDefinitions.map((role) => {
+                          const granted = effectivePermissionIds(role.id, rolePermissions).includes(permission.id);
+                          return (
+                            <td key={role.id} className="text-center py-3 px-3">
+                              {granted ? (
+                                <CheckCircle className="size-4 text-green-400 inline-block" />
+                              ) : (
+                                <span className="text-slate-600">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </motion.div>
         </div>

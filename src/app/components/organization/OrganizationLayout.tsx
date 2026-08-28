@@ -64,7 +64,7 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
     { id: 'finance-os', label: 'Finance OS', icon: Cpu },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'profit-intelligence', label: 'Profit Intelligence', icon: LineChart },
-    { id: 'ai-assistant', label: 'AI Assistant', icon: Brain },
+    { id: 'ai-assistant', label: 'AI Portal', icon: Brain },
     { id: 'quick-add', label: 'Quick Add', icon: Plus },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'recurring', label: 'Recurring', icon: Repeat },

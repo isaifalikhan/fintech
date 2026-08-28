@@ -1,9 +1,12 @@
 /**
- * §2 — Platform console. Mounted at `/platform`.
+ * §2 — Platform console. Mounted at `/platform`, under the shared
+ * `requireAuth, requirePlatformRole('platform_admin', 'platform_manager')` gate applied at the
+ * mount point in apiV1.ts (`r.use('/platform', ...)`) — no extra guard needed on routes here,
+ * same convention as `server/routes/audit.ts`.
  */
 
 import { Router, type Request, type Response } from 'express';
-import { store } from '../lib/store.js';
+import { store, type PlatformSettings } from '../lib/store.js';
 import { ok, notFound } from '../lib/http.js';
 
 interface PlatformOrgMeta {
@@ -30,6 +33,55 @@ const DEFAULT_ORG_META: PlatformOrgMeta = {
   limits: { users: 5, usersUsed: 1, statements: 100, statementsUsed: 0, currencies: 2, currenciesUsed: 1 },
   billing: { amount: 0 },
 };
+
+/** Mirrors client `DEFAULT_PLATFORM_SETTINGS` in src/services/platformService.ts. */
+const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
+  enabledCurrencies: {
+    PKR: true, USD: true, EUR: true, GBP: true, AED: true, CAD: true, AUD: true, SGD: true,
+  },
+  dataRetention: {
+    transactionDataRetentionDays: 730,
+    auditLogRetentionDays: 365,
+    statementFilesRetentionDays: 365,
+    deletedOrgDataRetentionDays: 90,
+    autoDeleteExpiredData: true,
+  },
+  backup: {
+    fullBackupFrequency: 'Daily',
+    incrementalBackupFrequency: 'Hourly',
+    backupRetentionDays: 30,
+  },
+  featureFlags: {
+    'AI-Powered Category Suggestions': true,
+    'Advanced What-If Simulations': true,
+    'API Access (Beta)': false,
+    'White Label Mode': false,
+    'Multi-Currency Auto-Convert': true,
+    'Export to QuickBooks': false,
+  },
+};
+
+function mergePlatformSettings(current: PlatformSettings, updates: Partial<PlatformSettings>): PlatformSettings {
+  return {
+    ...current,
+    ...updates,
+    enabledCurrencies: { ...current.enabledCurrencies, ...(updates.enabledCurrencies || {}) },
+    dataRetention: { ...current.dataRetention, ...(updates.dataRetention || {}) },
+    backup: { ...current.backup, ...(updates.backup || {}) },
+    featureFlags: { ...current.featureFlags, ...(updates.featureFlags || {}) },
+  };
+}
+
+/**
+ * In-memory backup-history log — session-only (grows as backups are triggered), NOT part of
+ * `ServerStore`/SQLite persistence. Mirrors `server/routes/audit.ts`'s `auditLogs` array exactly.
+ */
+interface BackupHistoryEntry {
+  id: string;
+  timestamp: string;
+  sizeBytes: number;
+}
+const backupHistory: BackupHistoryEntry[] = [];
 
 export function createPlatformRouter(): Router {
   const r = Router();
@@ -92,6 +144,34 @@ export function createPlatformRouter(): Router {
       activeSubscriptions: store.organizations.length,
       overdueInvoices: 3,
     });
+  });
+
+  r.get('/settings', (_req: Request, res: Response) => {
+    ok(res, store.platformSettings[0] || DEFAULT_PLATFORM_SETTINGS);
+  });
+
+  r.patch('/settings', (req: Request, res: Response) => {
+    const updates = req.body as Partial<PlatformSettings>;
+    const current = store.platformSettings[0] || { ...DEFAULT_PLATFORM_SETTINGS };
+    const merged = mergePlatformSettings(current, updates);
+    store.platformSettings[0] = merged;
+    store.persist();
+    ok(res, merged);
+  });
+
+  r.get('/backup-history', (_req: Request, res: Response) => {
+    ok(res, backupHistory);
+  });
+
+  r.post('/backup-history', (req: Request, res: Response) => {
+    const { sizeBytes } = req.body as { sizeBytes?: unknown };
+    const entry: BackupHistoryEntry = {
+      id: `backup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      sizeBytes: typeof sizeBytes === 'number' ? sizeBytes : 0,
+    };
+    backupHistory.unshift(entry);
+    ok(res, entry);
   });
 
   return r;
