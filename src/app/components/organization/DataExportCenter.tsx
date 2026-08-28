@@ -161,8 +161,10 @@ export function DataExportCenter() {
 
   const [enabledIds, setEnabledIds] = useState<Record<ExportOptionId, boolean>>(DEFAULT_ENABLED);
   const [exportFormat, setExportFormat] = useState<'csv' | 'json' | 'excel'>('csv');
-  const [dateFrom, setDateFrom] = useState('2024-01-01');
-  const [dateTo, setDateTo] = useState('2025-12-31');
+  // Defaults span "everything up to today" so the date filter (now wired into a real
+  // fetch, see below) doesn't silently truncate current data if left untouched.
+  const [dateFrom, setDateFrom] = useState('2020-01-01');
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -346,7 +348,7 @@ export function DataExportCenter() {
           results.push({ label: 'Team', success: r.success });
         }
         if (enabled_ids.has('audit')) {
-          const r = exportToCSV(buildAuditRows(auditLogs), AUDIT_HEADERS, `finance-os-audit-log-${ts}`);
+          const r = exportToCSV(buildAuditRows(auditLogs), AUDIT_HEADERS, `finance-os-audit-${ts}`);
           results.push({ label: 'Audit Logs', success: r.success });
         }
         if (enabled_ids.has('settings')) {

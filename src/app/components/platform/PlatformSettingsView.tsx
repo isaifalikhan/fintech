@@ -1,18 +1,62 @@
 import { motion } from 'motion/react';
 import { AXIOM } from '../../../styles/axiom-tokens';
-import { Globe, Shield, Database, Bell, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
-import { useState } from 'react';
+import { Globe, Shield, Database, Bell } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { platformService, DEFAULT_PLATFORM_SETTINGS } from '@/services/platformService';
+import type { PlatformSettings } from '@/services/platformService';
+import { useService, useServiceArray, useMutation } from '@/hooks/useService';
+import { isHttpBackendConfigured } from '@/lib/apiClient';
+import { dataStore } from '@/services/dataStore';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 
-interface ToggleSwitchProps {
-  defaultChecked?: boolean;
+const CURRENCY_CODES = ['PKR', 'USD', 'EUR', 'GBP', 'AED', 'CAD', 'AUD', 'SGD'] as const;
+
+const RETENTION_FIELDS: {
+  label: string;
+  key: 'transactionDataRetentionDays' | 'auditLogRetentionDays' | 'statementFilesRetentionDays' | 'deletedOrgDataRetentionDays';
+}[] = [
+  { label: 'Transaction Data Retention (days)', key: 'transactionDataRetentionDays' },
+  { label: 'Audit Log Retention (days)', key: 'auditLogRetentionDays' },
+  { label: 'Statement Files Retention (days)', key: 'statementFilesRetentionDays' },
+  { label: 'Deleted Org Data Retention (days)', key: 'deletedOrgDataRetentionDays' },
+];
+
+const FULL_BACKUP_OPTIONS = ['Daily', 'Weekly', 'Monthly'] as const;
+const INCREMENTAL_BACKUP_OPTIONS = ['Hourly', 'Every 6 hours', 'Every 12 hours'] as const;
+
+const FEATURE_FLAG_NAMES = [
+  'AI-Powered Category Suggestions',
+  'Advanced What-If Simulations',
+  'API Access (Beta)',
+  'White Label Mode',
+  'Multi-Currency Auto-Convert',
+  'Export to QuickBooks',
+] as const;
+
+function formatBackupSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function ToggleSwitch({ defaultChecked = false }: ToggleSwitchProps) {
-  const [checked, setChecked] = useState(defaultChecked);
+interface ToggleSwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function ToggleSwitch({ checked, onChange }: ToggleSwitchProps) {
   return (
     <button
-      onClick={() => setChecked(!checked)}
-      className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${checked ? '' : ''}`}
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="w-12 h-6 rounded-full relative cursor-pointer transition-colors"
       style={{
         background: checked ? 'rgba(168, 85, 247, 0.5)' : 'rgba(100, 116, 139, 0.3)',
         border: checked ? '1px solid rgba(168, 85, 247, 0.5)' : '1px solid rgba(100, 116, 139, 0.3)',
@@ -31,6 +75,80 @@ function ToggleSwitch({ defaultChecked = false }: ToggleSwitchProps) {
 }
 
 export function PlatformSettingsView() {
+  const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_PLATFORM_SETTINGS);
+  const initializedRef = useRef(false);
+
+  const { data: loadedSettings } = useService(() => platformService.getSettings(), []);
+
+  // Initialize local state from the server/dataStore once, on first successful load — never again,
+  // so this doesn't clobber in-progress edits on background refetches.
+  useEffect(() => {
+    if (!initializedRef.current && loadedSettings) {
+      setSettings(loadedSettings);
+      initializedRef.current = true;
+    }
+  }, [loadedSettings]);
+
+  const { execute: executeUpdateSettings, loading: savingSettings } = useMutation(
+    (updates: Partial<PlatformSettings>) => platformService.updateSettings(updates),
+  );
+
+  const handleSaveAll = async () => {
+    const res = await executeUpdateSettings(settings);
+    if (res.success && res.data) {
+      setSettings(res.data);
+      toast.success(res.message || 'Settings saved');
+    } else {
+      toast.error(res.error || 'Could not save settings');
+    }
+  };
+
+  const [backingUp, setBackingUp] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const {
+    data: backupHistoryEntries,
+    loading: historyLoading,
+    refetch: refetchHistory,
+  } = useServiceArray(() => platformService.getBackupHistory(), []);
+
+  const handleTriggerBackup = async () => {
+    setBackingUp(true);
+    try {
+      let bundle: { schemaVersion: number; payload: Record<string, unknown> };
+      if (isHttpBackendConfigured()) {
+        // /api/bundle sits outside the versioned /api/v1 router apiGet() targets, so it needs a
+        // raw fetch — same base-URL resolution as dataStore.ts's own /api/bundle calls.
+        const base = (import.meta.env.VITE_LOCAL_API_BASE ?? '').replace(/\/$/, '');
+        const res = await fetch(`${base}/api/bundle`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Backup request failed (HTTP ${res.status})`);
+        bundle = await res.json();
+      } else {
+        bundle = dataStore.getSnapshot();
+      }
+
+      const json = JSON.stringify(bundle, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const filename = `finance-os-backup-${Date.now()}.json`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      await platformService.recordBackup(blob.size);
+      await refetchHistory();
+      toast.success('Backup downloaded');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Backup failed');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
   return (
     <div className="p-8 space-y-8" style={{ background: AXIOM.backgrounds.main, minHeight: '100%' }}>
       {/* Header */}
@@ -60,14 +178,22 @@ export function PlatformSettingsView() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          {['PKR', 'USD', 'EUR', 'GBP', 'AED', 'CAD', 'AUD', 'SGD'].map((currency) => (
+          {CURRENCY_CODES.map((currency) => (
             <div
               key={currency}
               className="flex items-center justify-between p-4 rounded-lg"
               style={AXIOM.containers.item}
             >
               <span className="text-white font-mono font-medium">{currency}</span>
-              <ToggleSwitch defaultChecked />
+              <ToggleSwitch
+                checked={!!settings.enabledCurrencies[currency]}
+                onChange={(checked) =>
+                  setSettings((s) => ({
+                    ...s,
+                    enabledCurrencies: { ...s.enabledCurrencies, [currency]: checked },
+                  }))
+                }
+              />
             </div>
           ))}
         </div>
@@ -97,17 +223,19 @@ export function PlatformSettingsView() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 mb-4">
-          {[
-            { label: 'Transaction Data Retention (days)', value: '730' },
-            { label: 'Audit Log Retention (days)', value: '365' },
-            { label: 'Statement Files Retention (days)', value: '365' },
-            { label: 'Deleted Org Data Retention (days)', value: '90' },
-          ].map((field) => (
-            <div key={field.label} className="space-y-2">
+          {RETENTION_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-2">
               <label className="text-xs text-slate-400 font-mono">{field.label}</label>
               <input
                 type="number"
-                defaultValue={field.value}
+                value={settings.dataRetention[field.key]}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setSettings((s) => ({
+                    ...s,
+                    dataRetention: { ...s.dataRetention, [field.key]: Number.isNaN(value) ? 0 : value },
+                  }));
+                }}
                 className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
                 style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
               />
@@ -120,7 +248,15 @@ export function PlatformSettingsView() {
             <p className="text-sm text-white font-medium">Auto-delete expired data</p>
             <p className="text-xs text-slate-400 font-mono">Automatically remove data after retention period</p>
           </div>
-          <ToggleSwitch defaultChecked />
+          <ToggleSwitch
+            checked={settings.dataRetention.autoDeleteExpiredData}
+            onChange={(checked) =>
+              setSettings((s) => ({
+                ...s,
+                dataRetention: { ...s.dataRetention, autoDeleteExpiredData: checked },
+              }))
+            }
+          />
         </div>
       </motion.div>
 
@@ -145,39 +281,89 @@ export function PlatformSettingsView() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 mb-4">
-          {[
-            { label: 'Full Backup Frequency', type: 'select', options: ['Daily', 'Weekly', 'Monthly'] },
-            { label: 'Incremental Backup Frequency', type: 'select', options: ['Hourly', 'Every 6 hours', 'Every 12 hours'] },
-            { label: 'Backup Retention (days)', type: 'number', value: '30' },
-            { label: 'Backup Storage Location', type: 'text', value: 'AWS S3 - us-east-1', disabled: true },
-          ].map((field) => (
-            <div key={field.label} className="space-y-2">
-              <label className="text-xs text-slate-400 font-mono">{field.label}</label>
-              {field.type === 'select' ? (
-                <select className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm" style={{
-                  background: AXIOM.inputs.background,
-                  border: AXIOM.inputs.border,
-                }}>
-                  {field.options?.map(opt => <option key={opt}>{opt}</option>)}
-                </select>
-              ) : (
-                <input
-                  type={field.type}
-                  defaultValue={field.value}
-                  disabled={field.disabled}
-                  className={`w-full px-4 py-3 rounded-lg text-white font-mono text-sm ${field.disabled ? 'opacity-60' : ''}`}
-                  style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
-                />
-              )}
-            </div>
-          ))}
+          <div className="space-y-2">
+            <label className="text-xs text-slate-400 font-mono">Full Backup Frequency</label>
+            <select
+              value={settings.backup.fullBackupFrequency}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  backup: {
+                    ...s.backup,
+                    fullBackupFrequency: e.target.value as PlatformSettings['backup']['fullBackupFrequency'],
+                  },
+                }))
+              }
+              className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+              style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+            >
+              {FULL_BACKUP_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-slate-400 font-mono">Incremental Backup Frequency</label>
+            <select
+              value={settings.backup.incrementalBackupFrequency}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  backup: {
+                    ...s.backup,
+                    incrementalBackupFrequency: e.target.value as PlatformSettings['backup']['incrementalBackupFrequency'],
+                  },
+                }))
+              }
+              className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+              style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+            >
+              {INCREMENTAL_BACKUP_OPTIONS.map((opt) => <option key={opt}>{opt}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-slate-400 font-mono">Backup Retention (days)</label>
+            <input
+              type="number"
+              value={settings.backup.backupRetentionDays}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setSettings((s) => ({
+                  ...s,
+                  backup: { ...s.backup, backupRetentionDays: Number.isNaN(value) ? 0 : value },
+                }));
+              }}
+              className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+              style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-slate-400 font-mono">Backup Storage Location</label>
+            <input
+              type="text"
+              defaultValue="AWS S3 - us-east-1"
+              disabled
+              className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm opacity-60"
+              style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+            />
+          </div>
         </div>
 
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-mono" style={AXIOM.buttons.info}>
-            Trigger Manual Backup
+          <button
+            onClick={handleTriggerBackup}
+            disabled={backingUp}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-mono disabled:opacity-60 disabled:cursor-not-allowed"
+            style={AXIOM.buttons.info}
+          >
+            {backingUp ? 'Backing up…' : 'Trigger Manual Backup'}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-mono" style={AXIOM.buttons.outline}>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-mono"
+            style={AXIOM.buttons.outline}
+          >
             View Backup History
           </button>
         </div>
@@ -204,24 +390,25 @@ export function PlatformSettingsView() {
         </div>
 
         <div className="space-y-3">
-          {[
-            { name: 'AI-Powered Category Suggestions', enabled: true },
-            { name: 'Advanced What-If Simulations', enabled: true },
-            { name: 'API Access (Beta)', enabled: false },
-            { name: 'White Label Mode', enabled: false },
-            { name: 'Multi-Currency Auto-Convert', enabled: true },
-            { name: 'Export to QuickBooks', enabled: false },
-          ].map((feature, idx) => (
+          {FEATURE_FLAG_NAMES.map((name, idx) => (
             <motion.div
-              key={idx}
+              key={name}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.45 + idx * 0.03 }}
               className="flex items-center justify-between p-4 rounded-lg hover:bg-white/5 transition-colors"
               style={AXIOM.containers.item}
             >
-              <p className="text-sm text-white font-medium">{feature.name}</p>
-              <ToggleSwitch defaultChecked={feature.enabled} />
+              <p className="text-sm text-white font-medium">{name}</p>
+              <ToggleSwitch
+                checked={!!settings.featureFlags[name]}
+                onChange={(checked) =>
+                  setSettings((s) => ({
+                    ...s,
+                    featureFlags: { ...s.featureFlags, [name]: checked },
+                  }))
+                }
+              />
             </motion.div>
           ))}
         </div>
@@ -234,10 +421,51 @@ export function PlatformSettingsView() {
         transition={{ delay: 0.5 }}
         className="flex justify-end"
       >
-        <button className="px-8 py-3 rounded-xl text-white font-medium" style={AXIOM.buttons.action}>
-          Save All Changes
+        <button
+          onClick={handleSaveAll}
+          disabled={savingSettings}
+          className="px-8 py-3 rounded-xl text-white font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+          style={AXIOM.buttons.action}
+        >
+          {savingSettings ? 'Saving…' : 'Save All Changes'}
         </button>
       </motion.div>
+
+      {/* Backup History Dialog */}
+      <Dialog
+        open={historyOpen}
+        onOpenChange={(open) => {
+          setHistoryOpen(open);
+          if (open) refetchHistory();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Backup History</DialogTitle>
+            <DialogDescription>Manual backups triggered from this page, this session.</DialogDescription>
+          </DialogHeader>
+          {historyLoading ? (
+            <p className="text-sm text-slate-400 font-mono py-4">Loading…</p>
+          ) : backupHistoryEntries.length === 0 ? (
+            <p className="text-sm text-slate-400 font-mono py-4">No backups triggered yet.</p>
+          ) : (
+            <div className="space-y-2 py-2 max-h-80 overflow-y-auto">
+              {backupHistoryEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between p-3 rounded-lg"
+                  style={AXIOM.containers.item}
+                >
+                  <span className="text-sm text-white font-mono">
+                    {new Date(entry.timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">{formatBackupSize(entry.sizeBytes)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
