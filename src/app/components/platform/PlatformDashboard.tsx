@@ -22,7 +22,12 @@ export function PlatformDashboard() {
       case 'plans':
         return <PlansView />;
       case 'ai':
-        return <PlatformAiPortal />;
+        return (
+          <PlatformAiPortal
+            onNavigateToOrganizations={() => setCurrentView('organizations')}
+            onNavigateToSettings={() => setCurrentView('settings')}
+          />
+        );
       case 'settings':
         return <PlatformSettingsView />;
       default:
