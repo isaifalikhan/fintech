@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
 import type { Transaction } from '@/services/types';
@@ -82,6 +83,8 @@ export function TransactionsLedger() {
 
   // ── Service wiring ───────────────────────────────────────────────────────
   const svc = useOrgServices();
+  const { currentOrganization } = useAuth();
+  const orgCurrency = currentOrganization?.currency || 'PKR';
 
   const { data: txnResult, loading: txnLoading, error: txnError } = useService(
     () => svc.transactions.getAll({ pageSize: 500 }),
@@ -264,11 +267,17 @@ export function TransactionsLedger() {
     setAmountTo('');
   };
 
-  const totalIncome = filteredTransactions
+  // Totals are simple sums of Transaction.amount — this app has no FX-conversion mechanism, so
+  // mixing currencies into one number would silently misstate it. Restrict to transactions in the
+  // org's own currency and surface what was excluded (mirrors reportService.getDashboardSummary()).
+  const sameCurrencyTransactions = filteredTransactions.filter((t) => t.currency === orgCurrency);
+  const otherCurrencyCount = filteredTransactions.length - sameCurrencyTransactions.length;
+
+  const totalIncome = sameCurrencyTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
-  const totalExpense = filteredTransactions
+  const totalExpense = sameCurrencyTransactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
 
@@ -362,7 +371,7 @@ export function TransactionsLedger() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Income</p>
-              <p className="text-2xl font-bold text-emerald-400">+{formatCurrency(totalIncome, 'PKR')}</p>
+              <p className="text-2xl font-bold text-emerald-400">+{formatCurrency(totalIncome, orgCurrency)}</p>
             </div>
             <div 
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -386,7 +395,7 @@ export function TransactionsLedger() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm mb-1">Total Expense</p>
-              <p className="text-2xl font-bold text-red-400">-{formatCurrency(totalExpense, 'PKR')}</p>
+              <p className="text-2xl font-bold text-red-400">-{formatCurrency(totalExpense, orgCurrency)}</p>
             </div>
             <div 
               className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -411,7 +420,7 @@ export function TransactionsLedger() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Net</p>
               <p className={`text-2xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {totalIncome - totalExpense >= 0 ? '+' : ''}{formatCurrency(totalIncome - totalExpense, 'PKR')}
+                {totalIncome - totalExpense >= 0 ? '+' : ''}{formatCurrency(totalIncome - totalExpense, orgCurrency)}
               </p>
             </div>
             <div 
@@ -426,6 +435,12 @@ export function TransactionsLedger() {
           </div>
         </motion.div>
       </div>
+
+      {otherCurrencyCount > 0 && (
+        <p className="text-xs" style={{ color: AXIOM.text.slate400 }}>
+          Excludes {otherCurrencyCount} transaction{otherCurrencyCount === 1 ? '' : 's'} in other currencies — no FX conversion yet
+        </p>
+      )}
 
       {/* Filters */}
       <motion.div
