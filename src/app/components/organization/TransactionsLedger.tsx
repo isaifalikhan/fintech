@@ -1,7 +1,6 @@
 import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
 import type { Transaction } from '@/services/types';
@@ -87,8 +86,6 @@ export function TransactionsLedger() {
 
   // ── Service wiring ───────────────────────────────────────────────────────
   const svc = useOrgServices();
-  const { currentOrganization } = useAuth();
-  const orgCurrency = currentOrganization?.currency || 'PKR';
 
   const { data: txnResult, loading: txnLoading, error: txnError } = useService(
     () => svc.transactions.getAll({ pageSize: 500 }),
