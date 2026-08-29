@@ -31,7 +31,7 @@ import {
   seedBundleIfEmpty,
 } from '@/services/supabaseBundle';
 import type { AuditLogEntry } from '@/services/auditService';
-import type { PlatformSettings } from '@/services/platformService';
+import type { PlatformSettings, PlatformPlan } from '@/services/platformService';
 
 /** Re-export for services/tests that imported version from dataStore. */
 export { DATA_STORE_SCHEMA_VERSION };
@@ -64,7 +64,7 @@ const SERIALIZABLE_KEYS = [
   'overheadAllocations', 'recurringTransactions', 'budgets', 'loans', 'cashFlowForecasts',
   'activeSessions', 'notifications',
   'expenses', 'payslips', 'timesheets', 'teamMembers', 'announcements',
-  'platformSettings',
+  'platformSettings', 'platformPlans',
 ] as const;
 
 type SerializableKey = (typeof SERIALIZABLE_KEYS)[number];
@@ -121,6 +121,12 @@ class DataStore {
   platformSettings: PlatformSettings[] = [];
   /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory backup-history log, same reasoning as auditLogs above. */
   backupHistory: { id: string; timestamp: string; sizeBytes: number }[] = [];
+  /**
+   * Subscription plan definitions, editable from PlansView (Platform Console → Plans & Billing).
+   * Unlike `platformSettings`, this is a real multi-row collection (like `departments`) — seeded
+   * from the starter Basic/Professional/Enterprise plans in `initialBundle.ts`, not a singleton.
+   */
+  platformPlans: PlatformPlan[];
 
   expenses: EmployeeExpense[];
   payslips: EmployeePayslip[];

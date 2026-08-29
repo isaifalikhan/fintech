@@ -207,7 +207,7 @@ export function AIFinancialAssistant() {
         id: 'overdue-loans',
         icon: Landmark,
         color: 'red',
-        title: `${overdueLoansCount} overdue loan${overdueLoansCount === 1 ? '' : 's'} need attention`,
+        title: `${overdueLoansCount} overdue loan${overdueLoansCount === 1 ? '' : 's'} ${overdueLoansCount === 1 ? 'needs' : 'need'} attention`,
         description: 'One or more loan records have passed their due date.',
         actionLabel: 'Loans',
         view: 'loans',

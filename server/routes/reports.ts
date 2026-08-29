@@ -11,8 +11,16 @@ export function createReportsRouter(): Router {
 
   r.get('/dashboard', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const txns = store.transactions.filter(t => t.organizationId === orgId);
+    const allTxns = store.transactions.filter(t => t.organizationId === orgId);
     const accounts = store.accounts.filter(a => a.organizationId === orgId);
+
+    // Mirrors src/services/reportService.ts — no FX conversion exists in this app, so
+    // revenue/expense/profit only sum transactions in the org's own currency; a mismatched
+    // transaction is reported as excluded rather than silently summed in as if equivalent.
+    const org = store.organizations.find(o => o.id === orgId);
+    const revenueExpenseCurrency = org?.currency || 'PKR';
+    const txns = allTxns.filter(t => t.currency === revenueExpenseCurrency);
+    const otherCurrencyTransactionCount = allTxns.length - txns.length;
 
     const totalRevenue = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -38,7 +46,9 @@ export function createReportsRouter(): Router {
         .reduce((s, l) => s + Math.abs(Number(l.remainingBalance ?? l.amount) || 0), 0);
     const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
     const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
-    const pendingTransactions = txns.filter(t => t.status === 'pending').length;
+    // Pending count is a review queue, not a money sum — keep it over every transaction
+    // regardless of currency, unlike the revenue/expense totals above.
+    const pendingTransactions = allTxns.filter(t => t.status === 'pending').length;
 
     ok(res, {
       totalRevenue,
@@ -52,6 +62,8 @@ export function createReportsRouter(): Router {
       revenueChange: 12.7,
       expenseChange: 8.3,
       profitChange: 16.7,
+      revenueExpenseCurrency,
+      otherCurrencyTransactionCount,
     });
   });
 

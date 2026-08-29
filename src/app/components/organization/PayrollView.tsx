@@ -168,6 +168,9 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
+              {!members.length && (
+                <p className="mt-1.5 text-xs text-amber-200/90">No employees found for this organization.</p>
+              )}
             </label>
 
             <label className="text-sm font-mono text-slate-300 space-y-1 block">

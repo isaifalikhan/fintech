@@ -963,7 +963,7 @@ export function OrgDashboard() {
       : profitPeriod === 'yearly'
         ? 'Yearly Profit'
         : 'Monthly Profit';
-  
+
   // Department revenue for the chart — real profitability per department (top 4 by revenue).
   const DEPT_CHART_COLORS = ['purple', 'cyan', 'pink', 'green'] as const;
   const departments = useMemo(
@@ -1174,7 +1174,7 @@ export function OrgDashboard() {
                 trend="up"
                 delay={0.1}
               />
-              
+
               <ModernKPICard
                 icon={Wallet}
                 label="Cash in Hand"
@@ -1184,7 +1184,7 @@ export function OrgDashboard() {
                 trend="up"
                 delay={0.2}
               />
-              
+
               <ModernKPICard
                 icon={DollarSign}
                 label={profitLabel}
@@ -1194,7 +1194,7 @@ export function OrgDashboard() {
                 trend="up"
                 delay={0.3}
               />
-              
+
               <ModernKPICard
                 icon={BarChart3}
                 label="Net Worth"

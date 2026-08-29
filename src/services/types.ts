@@ -488,6 +488,16 @@ export interface DashboardSummary {
   revenueChange: number; // percentage
   expenseChange: number;
   profitChange: number;
+  /**
+   * The currency `totalRevenue`/`totalExpenses`/`netProfit` are actually computed in (the org's
+   * default currency). There's no FX-conversion mechanism in this app, so those three totals only
+   * sum transactions recorded in this currency — mixing currencies into one number would silently
+   * misstate it (e.g. a USD org's "Monthly Profit" reading as if a PKR expense were USD).
+   */
+  revenueExpenseCurrency: string;
+  /** Transactions excluded from totalRevenue/totalExpenses/netProfit because their own `currency`
+   *  differs from `revenueExpenseCurrency`. Surface this in the UI rather than hiding the gap. */
+  otherCurrencyTransactionCount: number;
 }
 
 export interface CashFlowSummary {

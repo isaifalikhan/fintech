@@ -14,6 +14,25 @@ function parseTags(q: unknown): string[] | undefined {
   return [String(q)];
 }
 
+/**
+ * Move a bank account's running `balance` for one transaction — the Express mirror of
+ * `applyBalanceDelta` in `src/services/transactionService.ts`. Only when the transaction's own
+ * currency matches the account's currency (this app has no FX conversion); mismatched-currency
+ * amounts are left untouched rather than added/subtracted as if equivalent.
+ */
+function applyBalanceDelta(
+  bankAccountId: string,
+  currency: string,
+  amount: number,
+  type: 'debit' | 'credit',
+  sign: 1 | -1,
+): void {
+  const acct = store.bankAccounts.find(a => a.id === bankAccountId);
+  if (!acct || acct.currency !== currency) return;
+  const delta = (type === 'credit' ? Math.abs(amount) : -Math.abs(amount)) * sign;
+  acct.balance = (Number(acct.balance) || 0) + delta;
+}
+
 export function createTransactionsRouter(): Router {
   const r = Router({ mergeParams: true });
 
@@ -76,6 +95,8 @@ export function createTransactionsRouter(): Router {
       if (idx === -1) {
         errors.push({ id, error: 'Not found' });
       } else {
+        const txn = store.transactions[idx];
+        applyBalanceDelta(txn.bankAccountId, txn.currency, txn.amount, txn.type, -1);
         store.transactions.splice(idx, 1);
         succeeded++;
       }
@@ -144,6 +165,7 @@ export function createTransactionsRouter(): Router {
     const data = req.body as Omit<Transaction, 'id' | 'organizationId' | 'createdAt'>;
     const newTxn: Transaction = { ...data, id: store.generateId('txn'), organizationId: orgId, createdAt: new Date().toISOString() };
     store.transactions.unshift(newTxn);
+    applyBalanceDelta(newTxn.bankAccountId, newTxn.currency, newTxn.amount, newTxn.type, 1);
     store.persist();
     created(res, newTxn, 'Transaction created');
   });
@@ -151,7 +173,13 @@ export function createTransactionsRouter(): Router {
   r.patch('/:id', (req: Request, res: Response) => {
     const idx = store.transactions.findIndex(t => t.id === req.params.id);
     if (idx === -1) return notFound(res, 'Transaction');
-    store.transactions[idx] = { ...store.transactions[idx], ...(req.body as Partial<Transaction>) };
+    const prev = store.transactions[idx];
+    const next = { ...prev, ...(req.body as Partial<Transaction>) };
+    // Reverse the prior amount's effect, then apply the new one — keeps the balance correct
+    // across edits to amount, type, bankAccountId, or currency.
+    applyBalanceDelta(prev.bankAccountId, prev.currency, prev.amount, prev.type, -1);
+    applyBalanceDelta(next.bankAccountId, next.currency, next.amount, next.type, 1);
+    store.transactions[idx] = next;
     store.persist();
     ok(res, store.transactions[idx], 'Transaction updated');
   });
@@ -159,6 +187,8 @@ export function createTransactionsRouter(): Router {
   r.delete('/:id', (req: Request, res: Response) => {
     const idx = store.transactions.findIndex(t => t.id === req.params.id);
     if (idx === -1) return notFound(res, 'Transaction');
+    const txn = store.transactions[idx];
+    applyBalanceDelta(txn.bankAccountId, txn.currency, txn.amount, txn.type, -1);
     store.transactions.splice(idx, 1);
     store.persist();
     ok(res, null, 'Transaction deleted');

@@ -389,6 +389,11 @@ export function OrganizationDashboard() {
                 percentage="15.7%"
                 trend="up"
                 delay={0.2}
+                note={
+                  kpis && kpis.otherCurrencyTransactionCount > 0
+                    ? `Excludes ${kpis.otherCurrencyTransactionCount} transaction${kpis.otherCurrencyTransactionCount === 1 ? '' : 's'} in other currencies — no FX conversion yet`
+                    : undefined
+                }
               />
 
               <ModernKPICard

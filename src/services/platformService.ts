@@ -13,7 +13,7 @@
  */
 
 import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
-import { dataStore, simulateDelay } from './dataStore';
+import { dataStore, generateId, simulateDelay } from './dataStore';
 import type { ServiceResponse } from './types';
 
 // ── Platform Types ──────────────────────────────────────────────────────────
@@ -73,7 +73,12 @@ export interface BillingStats {
  * controls exactly (currency codes, retention labels, backup selects, feature-flag names).
  */
 export interface PlatformSettings {
-  /** Keyed by currency code shown on the page (PKR, USD, EUR, GBP, AED, CAD, AUD, SGD). */
+  /**
+   * Keyed by currency code. Starts with the 8 defaults below (PKR, USD, EUR, GBP, AED, CAD,
+   * AUD, SGD), but the set is open-ended — PlatformSettingsView's "+ Add Currency" dialog
+   * inserts any additional code from `SUPPORTED_CURRENCIES` (src/lib/currencies.ts) that
+   * isn't already a key here.
+   */
   enabledCurrencies: Record<string, boolean>;
   dataRetention: {
     transactionDataRetentionDays: number;
@@ -100,7 +105,13 @@ export interface BackupHistoryEntry {
 
 // ── Seed Data (replaces inline constants in 3 components) ───────────────────
 
-const PLANS: PlatformPlan[] = [
+/**
+ * Fallback used only when `dataStore.platformPlans` is empty (e.g. a persisted bundle from
+ * before this collection existed). Normal reads/writes go through `dataStore.platformPlans`,
+ * seeded from this same data in `src/services/initialBundle.ts`'s `PLATFORM_PLANS_SEED` —
+ * kept in sync with `DEFAULT_PLATFORM_PLANS` in server/lib/store.ts.
+ */
+export const DEFAULT_PLATFORM_PLANS: PlatformPlan[] = [
   {
     id: 'plan-1',
     name: 'Basic',
@@ -196,6 +207,14 @@ function mergePlatformSettings(current: PlatformSettings, updates: Partial<Platf
   };
 }
 
+function mergePlatformPlan(current: PlatformPlan, updates: Partial<PlatformPlan>): PlatformPlan {
+  return {
+    ...current,
+    ...updates,
+    limits: { ...current.limits, ...(updates.limits || {}) },
+  };
+}
+
 // ── Service ─────────────────────────────────────────────────────────────────
 
 export const platformService = {
@@ -262,27 +281,64 @@ export const platformService = {
 
   /**
    * Get all subscription plans.
-   * TODO: Replace with GET /api/platform/plans
+   * When `VITE_API_BASE_URL` is set: `GET /platform/plans`.
    */
   async getPlans(): Promise<ServiceResponse<PlatformPlan[]>> {
     if (isHttpBackendConfigured()) {
       return apiGet<PlatformPlan[]>('/platform/plans');
     }
     await simulateDelay(100);
-    return { success: true, data: [...PLANS] };
+    const plans = dataStore.platformPlans.length > 0 ? dataStore.platformPlans : DEFAULT_PLATFORM_PLANS;
+    return { success: true, data: [...plans] };
   },
 
   /**
    * Get a single plan by ID.
-   * TODO: Replace with GET /api/platform/plans/:id
+   * When `VITE_API_BASE_URL` is set: `GET /platform/plans/:id`.
    */
   async getPlanById(id: string): Promise<ServiceResponse<PlatformPlan | null>> {
     if (isHttpBackendConfigured()) {
       return apiGet<PlatformPlan | null>(`/platform/plans/${encodeURIComponent(id)}`);
     }
     await simulateDelay(80);
-    const plan = PLANS.find(p => p.id === id) || null;
+    const plans = dataStore.platformPlans.length > 0 ? dataStore.platformPlans : DEFAULT_PLATFORM_PLANS;
+    const plan = plans.find(p => p.id === id) || null;
     return { success: !!plan, data: plan };
+  },
+
+  /**
+   * Create a new subscription plan. Wired to the "Create Plan" button on PlansView.
+   * When `VITE_API_BASE_URL` is set: `POST /platform/plans`.
+   */
+  async createPlan(plan: Omit<PlatformPlan, 'id'>): Promise<ServiceResponse<PlatformPlan>> {
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<Omit<PlatformPlan, 'id'>, PlatformPlan>('/platform/plans', plan);
+    }
+    await simulateDelay(200);
+    const newPlan: PlatformPlan = { ...plan, id: generateId('plan') };
+    dataStore.platformPlans.push(newPlan);
+    dataStore.notify('platformPlans');
+    return { success: true, data: newPlan, message: 'Plan created' };
+  },
+
+  /**
+   * Partial update of an existing plan. Wired to the "Edit Plan" button on PlansView.
+   * When `VITE_API_BASE_URL` is set: `PATCH /platform/plans/:id`.
+   */
+  async updatePlan(id: string, updates: Partial<PlatformPlan>): Promise<ServiceResponse<PlatformPlan>> {
+    if (isHttpBackendConfigured()) {
+      return apiRequest<PlatformPlan>(`/platform/plans/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    }
+    await simulateDelay(150);
+    const idx = dataStore.platformPlans.findIndex(p => p.id === id);
+    if (idx === -1) return { success: false, data: null as unknown as PlatformPlan, error: 'Plan not found' };
+    const merged = mergePlatformPlan(dataStore.platformPlans[idx], updates);
+    dataStore.platformPlans[idx] = merged;
+    dataStore.notify('platformPlans');
+    return { success: true, data: merged, message: 'Plan updated' };
   },
 
   /**

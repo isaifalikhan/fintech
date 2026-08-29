@@ -129,6 +129,7 @@ export function QuickAdd({
   const [method, setMethod] = useState<'cash' | 'bank' | 'card'>('bank');
   const [currency, setCurrency] = useState('PKR');
   const [account, setAccount] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
   const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
   const [lastSavedLine, setLastSavedLine] = useState<string | null>(null);
   const [counterparty, setCounterparty] = useState('');
@@ -147,6 +148,12 @@ export function QuickAdd({
     () => svc.categories.getAll(),
     [svc.orgId],
     ['categories'],
+  );
+
+  const { data: departments } = useServiceArray(
+    () => svc.departments.getAll(),
+    [svc.orgId],
+    ['departments'],
   );
 
   const { data: recentPage, loading: recentLoading, refetch: refetchRecent } = useService(
@@ -280,6 +287,7 @@ export function QuickAdd({
         ],
         attachments: [],
         ...(categoryId ? { categoryId } : {}),
+        ...(departmentId ? { departmentId } : {}),
       });
 
       if (!res.success) {
@@ -306,6 +314,7 @@ export function QuickAdd({
       setCounterparty('');
       setFxRateToPkr('');
       setSettlementNotes('');
+      setDepartmentId('');
 
       if (embedded) {
         setLastSavedLine(`Last saved · ${txnType === 'income' ? 'Income' : 'Expense'} · ${summary}`);
@@ -361,6 +370,7 @@ export function QuickAdd({
           tags: [scope === 'business' ? 'business' : 'personal', 'quick-add', 'bulk'],
           attachments: [],
           ...(categoryId ? { categoryId } : {}),
+          ...(departmentId ? { departmentId } : {}),
         });
         if (res.success) saved += 1;
       }
@@ -1010,6 +1020,33 @@ export function QuickAdd({
                         : method === 'cash'
                           ? 'Checking or savings (cash-style entry)'
                           : 'Bank / operating accounts'}
+                </p>
+              </div>
+
+              {/* Department (optional) */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium" style={{ color: AXIOM.text.slate300 }}>
+                  Department (optional)
+                </label>
+                <select
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  className="w-full h-12 px-4 rounded-xl"
+                  style={{
+                    background: AXIOM.inputs.background,
+                    border: AXIOM.inputs.border,
+                    color: AXIOM.inputs.color,
+                  }}
+                >
+                  <option value="">Unassigned</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Assign to a department to see it in Profit Intelligence and Department P&amp;L.
                 </p>
               </div>
 

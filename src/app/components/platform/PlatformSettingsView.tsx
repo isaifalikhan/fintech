@@ -8,6 +8,7 @@ import type { PlatformSettings } from '@/services/platformService';
 import { useService, useServiceArray, useMutation } from '@/hooks/useService';
 import { isHttpBackendConfigured } from '@/lib/apiClient';
 import { dataStore } from '@/services/dataStore';
+import { SUPPORTED_CURRENCIES } from '@/lib/currencies';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-
-const CURRENCY_CODES = ['PKR', 'USD', 'EUR', 'GBP', 'AED', 'CAD', 'AUD', 'SGD'] as const;
 
 const RETENTION_FIELDS: {
   label: string;
@@ -105,6 +104,21 @@ export function PlatformSettingsView() {
 
   const [backingUp, setBackingUp] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [addCurrencyOpen, setAddCurrencyOpen] = useState(false);
+
+  // Rows shown in "Global Currencies" are driven by whatever is actually persisted in
+  // settings.enabledCurrencies, not a hardcoded list — so a currency added here sticks
+  // around (and survives reload) the same way every other control on this page does.
+  const currencyRows = Object.keys(settings.enabledCurrencies).sort();
+  const addableCurrencies = SUPPORTED_CURRENCIES.filter((c) => !(c.code in settings.enabledCurrencies));
+
+  const handleAddCurrency = (code: string) => {
+    setSettings((s) => ({
+      ...s,
+      enabledCurrencies: { ...s.enabledCurrencies, [code]: true },
+    }));
+    toast.success(`${code} added — click "Save All Changes" to persist it`);
+  };
   const {
     data: backupHistoryEntries,
     loading: historyLoading,
@@ -178,7 +192,7 @@ export function PlatformSettingsView() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          {CURRENCY_CODES.map((currency) => (
+          {currencyRows.map((currency) => (
             <div
               key={currency}
               className="flex items-center justify-between p-4 rounded-lg"
@@ -197,7 +211,13 @@ export function PlatformSettingsView() {
             </div>
           ))}
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-mono" style={AXIOM.buttons.outline}>
+        <button
+          onClick={() => setAddCurrencyOpen(true)}
+          disabled={addableCurrencies.length === 0}
+          title={addableCurrencies.length === 0 ? 'All supported currencies are already listed above' : undefined}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-mono disabled:opacity-40 disabled:cursor-not-allowed"
+          style={AXIOM.buttons.outline}
+        >
           + Add Currency
         </button>
       </motion.div>
@@ -430,6 +450,40 @@ export function PlatformSettingsView() {
           {savingSettings ? 'Saving…' : 'Save All Changes'}
         </button>
       </motion.div>
+
+      {/* Add Currency Dialog */}
+      <Dialog open={addCurrencyOpen} onOpenChange={setAddCurrencyOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Currency</DialogTitle>
+            <DialogDescription>
+              Pick a currency to enable system-wide. It's added to the list above (enabled by
+              default) — remember to hit "Save All Changes" to persist it.
+            </DialogDescription>
+          </DialogHeader>
+          {addableCurrencies.length === 0 ? (
+            <p className="text-sm text-slate-400 font-mono py-4">
+              Every supported currency is already listed above.
+            </p>
+          ) : (
+            <div className="space-y-2 py-2 max-h-80 overflow-y-auto">
+              {addableCurrencies.map((c) => (
+                <button
+                  key={c.code}
+                  onClick={() => handleAddCurrency(c.code)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg text-left transition-colors hover:brightness-110"
+                  style={AXIOM.containers.item}
+                >
+                  <span className="text-white font-mono font-medium">
+                    {c.code} <span className="text-slate-400 font-normal">— {c.name}</span>
+                  </span>
+                  <span className="text-slate-400 font-mono">{c.symbol}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Backup History Dialog */}
       <Dialog

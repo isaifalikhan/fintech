@@ -65,8 +65,22 @@ export const reportService = {
 
     await simulateDelay(200);
 
-    const txns = dataStore.transactions.filter(t => t.organizationId === organizationId);
+    const allTxns = dataStore.transactions.filter(t => t.organizationId === organizationId);
     const accounts = dataStore.accounts.filter(a => a.organizationId === organizationId);
+
+    // Revenue/expense/profit are simple sums of Transaction.amount — there is no FX-conversion
+    // capability anywhere in this app (QuickAdd's "PKR rate" field only decorates the narration
+    // string and tags; it's never stored as a structured, reusable rate). Summing every
+    // transaction regardless of its own `currency` and labelling the total with the org's default
+    // currency silently overstated/understated it whenever a transaction was recorded in a
+    // different currency (e.g. a PKR expense making a USD org's "Monthly Profit" read PKR-1000
+    // lower while being displayed as if it were USD 1000 lower). Restrict these three totals to
+    // transactions in the org's own currency, and report what was excluded so the UI can say so
+    // instead of quietly being wrong.
+    const org = dataStore.organizations.find(o => o.id === organizationId);
+    const revenueExpenseCurrency = org?.currency || 'PKR';
+    const txns = allTxns.filter(t => t.currency === revenueExpenseCurrency);
+    const otherCurrencyTransactionCount = allTxns.length - txns.length;
 
     const totalRevenue = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -99,7 +113,9 @@ export const reportService = {
     const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
     const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
 
-    const pendingTransactions = txns.filter(t => t.status === 'pending').length;
+    // Pending count is a review queue, not a money sum — keep it over every transaction
+    // regardless of currency, unlike the revenue/expense totals above.
+    const pendingTransactions = allTxns.filter(t => t.status === 'pending').length;
 
     return {
       success: true,
@@ -115,6 +131,8 @@ export const reportService = {
         revenueChange: 12.7,
         expenseChange: 8.3,
         profitChange: 16.7,
+        revenueExpenseCurrency,
+        otherCurrencyTransactionCount,
       },
     };
   },

@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Sparkles, Lock, Mail, ArrowLeft, Zap, Brain } from 'lucide-react';
 import { mockUsers, mockOrganizationMembers } from '@/data/mockDatabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface BingLoginPageProps {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -36,6 +35,7 @@ export function BingLoginPage({ onLogin }: BingLoginPageProps) {
   const [error, setError] = useState('');
   const [scanProgress, setScanProgress] = useState(0);
   const [aiStatus, setAiStatus] = useState('Initializing AI...');
+  const navigate = useNavigate();
   const { theme } = useTheme();
   // Post-login navigation to the role's AI destination happens at the route level (see
   // `AppRoutes` in App.tsx) — as soon as `onLogin` resolves and the AuthContext `user` updates,

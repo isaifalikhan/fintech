@@ -37,7 +37,7 @@ const SERIALIZABLE_KEYS = [
   'overheadAllocations', 'recurringTransactions', 'budgets', 'loans', 'cashFlowForecasts',
   'activeSessions', 'notifications',
   'expenses', 'payslips', 'timesheets', 'teamMembers', 'announcements',
-  'platformSettings',
+  'platformSettings', 'platformPlans',
 ] as const;
 
 type SerializableKey = (typeof SERIALIZABLE_KEYS)[number];
@@ -65,6 +65,39 @@ export interface PlatformSettings {
   featureFlags: Record<string, boolean>;
 }
 
+/**
+ * Subscription plan definition, editable from PlansView (client duplicate: see
+ * `src/services/platformService.ts`'s `PlatformPlan` — same client/server duplication convention
+ * as `PlatformSettings` above and the old `PLANS`/`PlatformOrgMeta` constants in
+ * server/routes/platform.ts).
+ */
+export interface PlatformPlan {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  features: string[];
+  limits: {
+    users: number;
+    statements: number;
+    currencies: number;
+    storage: number;
+  };
+  active: boolean;
+}
+
+/**
+ * Backfill/fallback seed — mirrors `PLATFORM_PLANS_SEED` in src/services/initialBundle.ts and
+ * `DEFAULT_PLATFORM_PLANS` in src/services/platformService.ts. Used in `load()` below to
+ * populate `platformPlans` for a pre-existing SQLite row that predates this field (its stored
+ * payload won't have a `platformPlans` key, so `payload[k] ?? []` leaves it empty).
+ */
+const DEFAULT_PLATFORM_PLANS: PlatformPlan[] = [
+  { id: 'plan-1', name: 'Basic', price: 0, currency: 'PKR', features: ['statement_import'], limits: { users: 5, statements: 100, currencies: 2, storage: 2048 }, active: true },
+  { id: 'plan-2', name: 'Professional', price: 49900, currency: 'PKR', features: ['personal_finance', 'statement_import', 'profit_intelligence', 'team_management', 'costing_engine'], limits: { users: 10, statements: 500, currencies: 5, storage: 10240 }, active: true },
+  { id: 'plan-3', name: 'Enterprise', price: 99900, currency: 'PKR', features: ['personal_finance', 'statement_import', 'profit_intelligence', 'team_management', 'costing_engine', 'api_access', 'white_label'], limits: { users: 50, statements: 2000, currencies: 10, storage: 51200 }, active: true },
+];
+
 class ServerStore {
   organizations: Organization[] = [];
   users: User[] = [];
@@ -88,6 +121,8 @@ class ServerStore {
   notifications: Notification[] = [];
   /** Singleton row (array-of-one) — mirrors the client dataStore's `platformSettings` field. */
   platformSettings: PlatformSettings[] = [];
+  /** Real multi-row collection (like `departments`), not a singleton — mirrors the client dataStore's `platformPlans` field. */
+  platformPlans: PlatformPlan[] = [];
 
   expenses: EmployeeExpense[] = [];
   payslips: EmployeePayslip[] = [];
@@ -152,8 +187,17 @@ class ServerStore {
     // single shared literal password. See server/lib/seedPasswords.ts for why.
     const hashesChanged = await ensurePasswordHashes(this.users);
 
+    // One-time backfill: a SQLite row persisted before `platformPlans` existed won't carry that
+    // key in its payload_json, so the SERIALIZABLE_KEYS loop above left it as `[]`. Seed it from
+    // the same starter plans as a fresh bundle so Plans & Billing isn't empty.
+    let plansChanged = false;
+    if (this.platformPlans.length === 0) {
+      this.platformPlans = DEFAULT_PLATFORM_PLANS.map(p => ({ ...p, limits: { ...p.limits }, features: [...p.features] }));
+      plansChanged = true;
+    }
+
     this.loaded = true;
-    if (hashesChanged) this.persist();
+    if (hashesChanged || plansChanged) this.persist();
   }
 
   generateId(prefix: string): string {
