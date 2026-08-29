@@ -141,7 +141,18 @@ export function OrganizationDashboard() {
       : dashboardFallbackAnalytics.netWorth;
 
   const cashInHand = safeFinite(kpis?.cashOnHand, dashboardFallbackAnalytics.cashInHand);
-  const monthlyProfit = safeFinite(kpis?.netProfit, dashboardFallbackAnalytics.monthlyProfit);
+  const monthlyProfit = safeFinite(kpis?.monthlyProfit, dashboardFallbackAnalytics.monthlyProfit);
+
+  // Trend badge for the one KPI with a real period-over-period figure behind it. Total Balance,
+  // Cash in Hand and Net Worth are point-in-time balances with no stored history to diff against —
+  // fabricating a "% change" for those isn't honest, so they render with no badge at all.
+  const profitChangeBadge =
+    kpis?.profitChange != null
+      ? {
+          percentage: `${kpis.profitChange >= 0 ? '+' : ''}${kpis.profitChange.toFixed(1)}%`,
+          trend: (kpis.profitChange >= 0 ? 'up' : 'down') as const,
+        }
+      : {};
 
   const netWorthFromSummary =
     kpis != null
@@ -366,8 +377,6 @@ export function OrganizationDashboard() {
                 label="Total Balance"
                 value={totalBalance}
                 currency={orgCurrency}
-                percentage="12.5%"
-                trend="up"
                 delay={0}
               />
 
@@ -376,8 +385,6 @@ export function OrganizationDashboard() {
                 label="Cash in Hand"
                 value={cashInHand}
                 currency={orgCurrency}
-                percentage="8.2%"
-                trend="up"
                 delay={0.1}
               />
 
@@ -386,8 +393,7 @@ export function OrganizationDashboard() {
                 label="Monthly Profit"
                 value={monthlyProfit}
                 currency={orgCurrency}
-                percentage="15.7%"
-                trend="up"
+                {...profitChangeBadge}
                 delay={0.2}
                 note={
                   kpis && kpis.otherCurrencyTransactionCount > 0
@@ -401,8 +407,6 @@ export function OrganizationDashboard() {
                 label="Net Worth"
                 value={netWorth}
                 currency={orgCurrency}
-                percentage="9.3%"
-                trend="up"
                 delay={0.3}
               />
             </div>

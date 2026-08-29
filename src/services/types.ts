@@ -477,22 +477,32 @@ export interface TransactionFilters extends PaginationParams, DateRangeFilter {
 
 // Dashboard summary types
 export interface DashboardSummary {
+  /** Lifetime totals — every transaction the org has ever recorded, not scoped to any period. */
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
   profitMargin: number;
+  /** Scoped to the current calendar month — what the "Monthly Profit" KPI actually displays. */
+  monthlyRevenue: number;
+  monthlyExpenses: number;
+  monthlyProfit: number;
   cashOnHand: number;
   accountsReceivable: number;
   accountsPayable: number;
   pendingTransactions: number;
-  revenueChange: number; // percentage
-  expenseChange: number;
-  profitChange: number;
   /**
-   * The currency `totalRevenue`/`totalExpenses`/`netProfit` are actually computed in (the org's
-   * default currency). There's no FX-conversion mechanism in this app, so those three totals only
-   * sum transactions recorded in this currency — mixing currencies into one number would silently
-   * misstate it (e.g. a USD org's "Monthly Profit" reading as if a PKR expense were USD).
+   * % change of the monthly figure above vs. the prior calendar month. `null` (not 0) when the
+   * prior month has no transactions to compare against — a "% change from zero" isn't a real number.
+   */
+  revenueChange: number | null;
+  expenseChange: number | null;
+  profitChange: number | null;
+  /**
+   * The currency `totalRevenue`/`totalExpenses`/`netProfit`/`monthlyRevenue`/`monthlyExpenses`/
+   * `monthlyProfit` are actually computed in (the org's default currency). There's no FX-conversion
+   * mechanism in this app, so those totals only sum transactions recorded in this currency — mixing
+   * currencies into one number would silently misstate it (e.g. a USD org's "Monthly Profit" reading
+   * as if a PKR expense were USD).
    */
   revenueExpenseCurrency: string;
   /** Transactions excluded from totalRevenue/totalExpenses/netProfit because their own `currency`

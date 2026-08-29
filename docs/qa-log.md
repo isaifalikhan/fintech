@@ -10,6 +10,26 @@ Related: [`gotchas.md`](gotchas.md) · [`data-sources.md`](data-sources.md) ·
 
 ## Data wiring
 
+**"Monthly Profit" was actually lifetime cumulative profit.** `getDashboardSummary()`'s `netProfit`
+summed every transaction the org had ever recorded, with no date filtering, and the "Monthly Profit"
+KPI card displayed it directly. Added real `monthlyRevenue`/`monthlyExpenses`/`monthlyProfit` fields
+scoped to the current calendar month; `netProfit`/`totalRevenue`/`totalExpenses` stay as lifetime
+totals (other consumers — `WhatIfSimulator.tsx` — already treat them that way). Mirrored in
+`server/routes/reports.ts` and applied to both live dashboards (`OrganizationDashboardModern.tsx`,
+`organization/OrgDashboard.tsx`).
+
+**KPI trend badges (12.5% / 8.2% / 15.7% / 9.3%) were hardcoded literals on every card, for every
+org, regardless of actual performance.** `reportService`'s `revenueChange`/`expenseChange`/
+`profitChange` were unused dead fields with fixed values; the dashboards' badges were separate
+literal strings in JSX, not even reading those fields. Now `profitChange` is a real month-over-month
+% (comparing the new `monthlyProfit` to the prior calendar month), wired to the "Monthly Profit"
+card's badge. Total Balance, Cash in Hand and Net Worth are point-in-time balances with no stored
+history to diff against, so fabricating a "% change" for them isn't possible without new snapshot
+infrastructure — their badges were removed rather than invented (`ModernKPICard`'s `percentage`/
+`trend` props are now optional; the badge renders only when both are present). The badge is also
+omitted when the prior month has no transactions to compare against, since "% change from zero"
+isn't a real number.
+
 **Cash in Hand & Net Worth showed $0 despite $3.6M in the bank.**
 `reportService.getDashboardSummary()` summed the **chart of accounts**, whose balances stay 0 unless
 journalled, while real money lives on `bankAccounts`. Now derives cash from bank accounts (chart as

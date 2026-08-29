@@ -6,7 +6,7 @@ re-reports) a number that was invented.
 
 **Rule:** if no service exists for something, say so — do not add a plausible-looking constant.
 
-Last verified: 2026-08-14.
+Last verified: 2026-08-29.
 
 ---
 
@@ -65,8 +65,6 @@ constant applied regardless of currency.
 - **`OrganizationDashboardModern.tsx`** — `departmentData` (12-month sine wave) and
   `expenseCategoryData` (hardcoded donut). `reports.getExpenseBreakdown()` exists and is unused.
   **Monthly Goals** rings (75% / 60%) are literals with no goals feature behind them.
-- **Trend percentages everywhere** — `revenueChange: 12.7`, `expenseChange: 8.3`, `profitChange: 16.7`
-  are literals in `reportService`; they surface as the 12.5% / 8.2% / 15.7% / 9.3% chips.
 - **AI Assistant** — replies come from `SAMPLE_RESPONSES` keyword matching, not an LLM. Labelled as a
   demo in the UI.
 - **`PlatformSettingsView.tsx` / `PlansView.tsx`** — no persistence layer exists; toggles and

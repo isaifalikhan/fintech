@@ -27,6 +27,36 @@ export function createReportsRouter(): Router {
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // Mirrors src/services/reportService.ts — "Monthly Profit" needs an actual current-month
+    // figure, not the lifetime `netProfit` above. Trend badges compare vs. the prior calendar
+    // month; null (not 0%) when the prior month has nothing to compare against.
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date();
+    const currentMonthKey = monthKey(now);
+    const previousMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const inMonth = (t: (typeof txns)[number], key: string) => monthKey(new Date(t.date)) === key;
+
+    const currentMonthTxns = txns.filter(t => inMonth(t, currentMonthKey));
+    const previousMonthTxns = txns.filter(t => inMonth(t, previousMonthKey));
+
+    const sumCredits = (rows: typeof txns) => rows.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const sumDebits = (rows: typeof txns) => rows.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    const monthlyRevenue = sumCredits(currentMonthTxns);
+    const monthlyExpenses = sumDebits(currentMonthTxns);
+    const monthlyProfit = monthlyRevenue - monthlyExpenses;
+
+    const prevMonthlyRevenue = sumCredits(previousMonthTxns);
+    const prevMonthlyExpenses = sumDebits(previousMonthTxns);
+    const prevMonthlyProfit = prevMonthlyRevenue - prevMonthlyExpenses;
+
+    const pctChange = (curr: number, prev: number): number | null =>
+      prev === 0 ? null : Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10;
+
+    const revenueChange = pctChange(monthlyRevenue, prevMonthlyRevenue);
+    const expenseChange = pctChange(monthlyExpenses, prevMonthlyExpenses);
+    const profitChange = pctChange(monthlyProfit, prevMonthlyProfit);
+
     // Mirrors src/services/reportService.ts — real cash sits on bank accounts/wallets, not on the
     // chart-of-accounts mirror (whose balances stay 0 unless journalled), and receivables/payables
     // fall back to the Loans module when no AR/AP chart account exists.
@@ -55,13 +85,16 @@ export function createReportsRouter(): Router {
       totalExpenses,
       netProfit,
       profitMargin: Math.round(profitMargin * 10) / 10,
+      monthlyRevenue,
+      monthlyExpenses,
+      monthlyProfit,
       cashOnHand,
       accountsReceivable,
       accountsPayable,
       pendingTransactions,
-      revenueChange: 12.7,
-      expenseChange: 8.3,
-      profitChange: 16.7,
+      revenueChange,
+      expenseChange,
+      profitChange,
       revenueExpenseCurrency,
       otherCurrencyTransactionCount,
     });

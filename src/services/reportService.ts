@@ -87,6 +87,38 @@ export const reportService = {
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // "Monthly Profit" needs an actual current-month figure — `netProfit` above is a lifetime sum
+    // and was being displayed under that label, silently showing cumulative profit as if it were
+    // this month's. Trend badges compare the monthly figure to the prior calendar month using the
+    // same currency-scoped transactions; they're null (not 0%) when the prior month has nothing to
+    // compare against, since a "% change from zero" isn't a real number.
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date();
+    const currentMonthKey = monthKey(now);
+    const previousMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const inMonth = (t: (typeof txns)[number], key: string) => monthKey(new Date(t.date)) === key;
+
+    const currentMonthTxns = txns.filter(t => inMonth(t, currentMonthKey));
+    const previousMonthTxns = txns.filter(t => inMonth(t, previousMonthKey));
+
+    const sumCredits = (rows: typeof txns) => rows.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const sumDebits = (rows: typeof txns) => rows.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    const monthlyRevenue = sumCredits(currentMonthTxns);
+    const monthlyExpenses = sumDebits(currentMonthTxns);
+    const monthlyProfit = monthlyRevenue - monthlyExpenses;
+
+    const prevMonthlyRevenue = sumCredits(previousMonthTxns);
+    const prevMonthlyExpenses = sumDebits(previousMonthTxns);
+    const prevMonthlyProfit = prevMonthlyRevenue - prevMonthlyExpenses;
+
+    const pctChange = (curr: number, prev: number): number | null =>
+      prev === 0 ? null : Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10;
+
+    const revenueChange = pctChange(monthlyRevenue, prevMonthlyRevenue);
+    const expenseChange = pctChange(monthlyExpenses, prevMonthlyExpenses);
+    const profitChange = pctChange(monthlyProfit, prevMonthlyProfit);
+
     // Real cash lives on the bank accounts/wallets the user actually maintains — the chart-of-
     // accounts mirror is not kept in step with them (its balances stay 0 unless journalled), which
     // made "Cash in Hand" and "Net Worth" read 0 while the dashboard's own Total Balance tile
@@ -124,13 +156,16 @@ export const reportService = {
         totalExpenses,
         netProfit,
         profitMargin: Math.round(profitMargin * 10) / 10,
+        monthlyRevenue,
+        monthlyExpenses,
+        monthlyProfit,
         cashOnHand,
         accountsReceivable,
         accountsPayable,
         pendingTransactions,
-        revenueChange: 12.7,
-        expenseChange: 8.3,
-        profitChange: 16.7,
+        revenueChange,
+        expenseChange,
+        profitChange,
         revenueExpenseCurrency,
         otherCurrencyTransactionCount,
       },

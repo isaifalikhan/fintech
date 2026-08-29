@@ -921,7 +921,7 @@ export function OrgDashboard() {
       case 'weekly':
         return safeFinite(analytics.weeklyProfit, analytics.monthlyProfit);
       case 'monthly':
-        return safeFinite(dashboardKPIs?.netProfit, analytics.monthlyProfit);
+        return safeFinite(dashboardKPIs?.monthlyProfit, analytics.monthlyProfit);
       case 'yearly':
         return safeFinite(analytics.yearlyProfit, analytics.monthlyProfit);
     }
@@ -963,6 +963,18 @@ export function OrgDashboard() {
       : profitPeriod === 'yearly'
         ? 'Yearly Profit'
         : 'Monthly Profit';
+
+  // Only the "monthly" period has a real service-backed figure behind it (weekly/yearly are
+  // still fallback placeholders — see dashboardFallbackAnalytics), so only it gets a trend badge.
+  // Total Balance, Cash in Hand and Net Worth are point-in-time balances with no stored history
+  // to diff against, so they never get a fabricated badge either.
+  const profitChangeBadge =
+    profitPeriod === 'monthly' && dashboardKPIs?.profitChange != null
+      ? {
+          percentage: `${dashboardKPIs.profitChange >= 0 ? '+' : ''}${dashboardKPIs.profitChange.toFixed(1)}%`,
+          trend: (dashboardKPIs.profitChange >= 0 ? 'up' : 'down') as const,
+        }
+      : {};
 
   // Department revenue for the chart — real profitability per department (top 4 by revenue).
   const DEPT_CHART_COLORS = ['purple', 'cyan', 'pink', 'green'] as const;
@@ -1170,8 +1182,6 @@ export function OrgDashboard() {
                 label="Total Balance"
                 value={totalBalance}
                 currency={orgCurrency}
-                percentage="12.5%"
-                trend="up"
                 delay={0.1}
               />
 
@@ -1180,8 +1190,6 @@ export function OrgDashboard() {
                 label="Cash in Hand"
                 value={cashOnHand}
                 currency={orgCurrency}
-                percentage="8.2%"
-                trend="up"
                 delay={0.2}
               />
 
@@ -1190,8 +1198,7 @@ export function OrgDashboard() {
                 label={profitLabel}
                 value={monthlyProfitDisplay}
                 currency={orgCurrency}
-                percentage="15.7%"
-                trend="up"
+                {...profitChangeBadge}
                 delay={0.3}
               />
 
@@ -1200,8 +1207,6 @@ export function OrgDashboard() {
                 label="Net Worth"
                 value={netWorthDisplay}
                 currency={orgCurrency}
-                percentage="12.5%"
-                trend="up"
                 delay={0.4}
               />
             </div>
