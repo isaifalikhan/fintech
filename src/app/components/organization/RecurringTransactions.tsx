@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { formatCurrency, formatDate } from '@/lib/formatters';
@@ -80,6 +81,7 @@ function todayISODate(): string {
 }
 
 export function RecurringTransactions() {
+  const orgCurrency = useOrgCurrency();
   const { theme } = useTheme();
   const svc = useOrgServices();
 
@@ -521,7 +523,7 @@ export function RecurringTransactions() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Monthly income</p>
-              <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalMonthlyIncome, 'PKR')}</p>
+              <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalMonthlyIncome, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"
@@ -545,7 +547,7 @@ export function RecurringTransactions() {
           <div className="flex items-center justify-between">
             <div>
               <p className="mb-1 text-sm text-slate-400">Monthly expense</p>
-              <p className="text-2xl font-bold text-red-400">{formatCurrency(totalMonthlyExpense, 'PKR')}</p>
+              <p className="text-2xl font-bold text-red-400">{formatCurrency(totalMonthlyExpense, orgCurrency)}</p>
             </div>
             <div
               className="flex h-12 w-12 items-center justify-center rounded-xl"
@@ -574,7 +576,7 @@ export function RecurringTransactions() {
                   totalMonthlyIncome - totalMonthlyExpense >= 0 ? 'text-emerald-400' : 'text-red-400'
                 }`}
               >
-                {formatCurrency(totalMonthlyIncome - totalMonthlyExpense, 'PKR')}
+                {formatCurrency(totalMonthlyIncome - totalMonthlyExpense, orgCurrency)}
               </p>
             </div>
             <div

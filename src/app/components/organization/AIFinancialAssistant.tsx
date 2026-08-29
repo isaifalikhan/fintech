@@ -1,8 +1,14 @@
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
+import { useService, useServiceArray } from '@/hooks/useService';
 import { fetchOrgAiSettings } from '@/services/aiSettingsService';
+import { organizationService } from '@/services/organizationService';
+import { auditService } from '@/services/auditService';
 import type { OrgAiIntegrationSettings } from '@/services/types';
+import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
+import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
+import { AXIOM } from '../../../styles/axiom-tokens';
 import {
   Brain,
   TrendingUp,
@@ -14,9 +20,15 @@ import {
   Users,
   PieChart,
   Activity,
-  Send,
-  Loader2,
   MessageCircle,
+  Search,
+  ArrowRight,
+  Receipt,
+  Landmark,
+  Wallet,
+  Mail,
+  Crown,
+  Shield,
 } from 'lucide-react';
 
 interface AIInsight {
@@ -36,14 +48,6 @@ interface FinancialPattern {
   frequency: string;
   trend: 'increasing' | 'decreasing' | 'stable';
   suggestion: string;
-}
-
-type ChatRole = 'user' | 'assistant';
-interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  suggestions?: string[];
 }
 
 const CHAT_SAMPLE_RESPONSES: {
@@ -77,10 +81,6 @@ const CHAT_QUICK_PROMPTS = [
   'Explain profit margin trends',
 ];
 
-/** Hard cap (paste + typing); soft threshold shows a calm warning only */
-const CHAT_INPUT_MAX = 4000;
-const CHAT_SOFT_WARN = 2000;
-
 function matchDemoReply(text: string): { response: string; suggestions?: string[] } {
   const lower = text.toLowerCase();
   const hit = CHAT_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
@@ -92,9 +92,41 @@ function matchDemoReply(text: string): { response: string; suggestions?: string[
   };
 }
 
+type AIPortalTab = 'ask' | 'insights' | 'activity';
+
+/** Simple case-insensitive substring → OrgView lookup for the command bar (Task 4). Not an LLM. */
+const COMMAND_BAR_ROUTES: { keywords: string[]; view: string; label: string }[] = [
+  { keywords: ['transaction', 'ledger', 'invoice'], view: 'transactions', label: 'Transactions' },
+  { keywords: ['loan'], view: 'loans', label: 'Loans' },
+  { keywords: ['budget'], view: 'budgets', label: 'Budgets' },
+  { keywords: ['team', 'invite', 'member'], view: 'team', label: 'Team' },
+  { keywords: ['payroll', 'salary'], view: 'payroll', label: 'Payroll' },
+  { keywords: ['report'], view: 'reports', label: 'Reports' },
+  { keywords: ['setting'], view: 'settings', label: 'Settings' },
+  { keywords: ['expense', 'add expense', 'quick add'], view: 'quick-add', label: 'Quick Add' },
+  { keywords: ['import', 'statement', 'upload'], view: 'import', label: 'Import' },
+  { keywords: ['account', 'bank'], view: 'accounts', label: 'Accounts' },
+  { keywords: ['asset'], view: 'assets', label: 'Assets' },
+  { keywords: ['inventory'], view: 'inventory', label: 'Inventory' },
+  { keywords: ['project'], view: 'projects', label: 'Projects' },
+  { keywords: ['forecast'], view: 'forecast', label: 'Forecast' },
+  { keywords: ['dashboard'], view: 'dashboard', label: 'Dashboard' },
+];
+
+function matchCommandBarRoute(text: string): { view: string; label: string } | null {
+  const lower = text.toLowerCase();
+  const hit = COMMAND_BAR_ROUTES.find((r) => r.keywords.some((k) => lower.includes(k)));
+  return hit ? { view: hit.view, label: hit.label } : null;
+}
+
 export function AIFinancialAssistant() {
-  const { orgId } = useOrgServices();
+  const svc = useOrgServices();
+  const { orgId } = svc;
+  const goToOrgView = useOrgWorkspaceNav();
   const [aiSettings, setAiSettings] = useState<OrgAiIntegrationSettings | null>(null);
+  const [activeTab, setActiveTab] = useState<AIPortalTab>('ask');
+  const [commandInput, setCommandInput] = useState('');
+  const [commandMessage, setCommandMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -107,6 +139,139 @@ export function AIFinancialAssistant() {
     window.addEventListener('finance-os-ai-settings', sync);
     return () => window.removeEventListener('finance-os-ai-settings', sync);
   }, [orgId]);
+
+  // ── Task 2: real, computed insights (Ask tab's KPI/insights below stay demo — out of scope) ──
+  const { data: txnResult } = useService(
+    () => svc.transactions.getAll({ pageSize: 500 }),
+    [svc.orgId],
+    ['transactions'],
+  );
+  const pendingTransactionsCount = useMemo(
+    () => (txnResult?.items ?? []).filter((t) => t.status === 'pending').length,
+    [txnResult],
+  );
+
+  const { data: loans } = useServiceArray(
+    () => svc.loans.getAll(),
+    [svc.orgId],
+    ['loans'],
+  );
+  const overdueLoansCount = useMemo(
+    () => loans.filter((l) => l.status === 'overdue').length,
+    [loans],
+  );
+
+  const { data: budgets } = useServiceArray(
+    () => svc.budgets.getAll(),
+    [svc.orgId],
+    ['budgets'],
+  );
+  const overBudgetCount = useMemo(
+    () => budgets.filter((b) => b.spentAmount > b.budgetedAmount).length,
+    [budgets],
+  );
+
+  const { data: memberRows } = useServiceArray(
+    () => organizationService.getMembers(orgId),
+    [orgId],
+    ['organizationMembers'],
+  );
+  const pendingInvitesCount = useMemo(
+    () => memberRows.filter((m) => m.status === 'pending').length,
+    [memberRows],
+  );
+
+  const insightCards = useMemo(() => {
+    const cards: {
+      id: string;
+      icon: typeof Brain;
+      color: 'red' | 'amber' | 'purple' | 'cyan';
+      title: string;
+      description: string;
+      actionLabel: string;
+      view: string;
+    }[] = [];
+    if (pendingTransactionsCount > 0) {
+      cards.push({
+        id: 'unclassified-transactions',
+        icon: Receipt,
+        color: 'amber',
+        title: `${pendingTransactionsCount} transaction${pendingTransactionsCount === 1 ? '' : 's'} need classification`,
+        description: 'These transactions are still pending review in your ledger.',
+        actionLabel: 'Transactions',
+        view: 'transactions',
+      });
+    }
+    if (overdueLoansCount > 0) {
+      cards.push({
+        id: 'overdue-loans',
+        icon: Landmark,
+        color: 'red',
+        title: `${overdueLoansCount} overdue loan${overdueLoansCount === 1 ? '' : 's'} ${overdueLoansCount === 1 ? 'needs' : 'need'} attention`,
+        description: 'One or more loan records have passed their due date.',
+        actionLabel: 'Loans',
+        view: 'loans',
+      });
+    }
+    if (overBudgetCount > 0) {
+      cards.push({
+        id: 'over-budget',
+        icon: Wallet,
+        color: 'purple',
+        title: `${overBudgetCount} budget${overBudgetCount === 1 ? '' : 's'} over limit`,
+        description: 'Spending has exceeded the budgeted amount for this period.',
+        actionLabel: 'Budgets',
+        view: 'budgets',
+      });
+    }
+    if (pendingInvitesCount > 0) {
+      cards.push({
+        id: 'pending-invites',
+        icon: Mail,
+        color: 'cyan',
+        title: `${pendingInvitesCount} pending invite${pendingInvitesCount === 1 ? '' : 's'} awaiting acceptance`,
+        description: 'These team invitations have not been accepted yet.',
+        actionLabel: 'Team',
+        view: 'team',
+      });
+    }
+    return cards;
+  }, [pendingTransactionsCount, overdueLoansCount, overBudgetCount, pendingInvitesCount]);
+
+  // ── Task 3: real activity feed ──────────────────────────────────────────
+  const { data: activityEntries, loading: activityLoading } = useServiceArray(
+    () => auditService.getAll(orgId),
+    [orgId],
+    ['auditLogs'],
+  );
+
+  const formatActivityTimestamp = (dateStr: string) =>
+    new Date(dateStr).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+  // ── Task 4: command bar (keyword lookup, not a real LLM) ────────────────
+  const handleCommandSubmit = () => {
+    const text = commandInput.trim();
+    if (!text) return;
+    const match = matchCommandBarRoute(text);
+    if (match && goToOrgView) {
+      goToOrgView(match.view);
+      setCommandInput('');
+      setCommandMessage(null);
+    } else {
+      setCommandMessage("Try navigating from the sidebar, or ask the chat below.");
+    }
+  };
+
+  const tabButtons: { id: AIPortalTab; label: string; icon: typeof Brain }[] = [
+    { id: 'ask', label: 'Ask', icon: MessageCircle },
+    { id: 'insights', label: 'Insights', icon: Lightbulb },
+    { id: 'activity', label: 'Activity', icon: Activity },
+  ];
 
   const aiInsights: AIInsight[] = [
     {
@@ -174,64 +339,6 @@ export function AIFinancialAssistant() {
     }
   };
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, sending]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const handleSend = useCallback(async (text?: string) => {
-    const raw = (text ?? input).trim();
-    if (!raw || sending) return;
-    if (raw.length > CHAT_INPUT_MAX) return;
-    setSendError(null);
-
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: raw,
-    };
-    // Commit user bubble before sending=true so the log never briefly shows neither empty hero nor bubbles (BUG-ORG-P04-001).
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
-    setSending(true);
-
-    try {
-      await new Promise<void>((resolve, reject) => {
-        window.setTimeout(() => {
-          if (raw.toLowerCase() === 'error demo') {
-            reject(new Error('Assistant is unavailable right now. Try again in a moment.'));
-            return;
-          }
-          resolve();
-        }, 700);
-      });
-
-      const { response, suggestions } = matchDemoReply(raw);
-      const assistantMsg: ChatMessage = {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        content: response,
-        suggestions,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Something went wrong. Try again.';
-      setSendError(msg);
-    } finally {
-      setSending(false);
-    }
-  }, [input, sending]);
-
   return (
     <div className="min-h-screen p-8 space-y-6" style={{ background: '#0a0a0a' }}>
       {/* Header with Dashboard Gradient */}
@@ -264,158 +371,87 @@ export function AIFinancialAssistant() {
         )}
       </motion.div>
 
-      {/* ORG-P04: chat panel — send path + empty state + errors in UI */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="rounded-3xl border border-purple-500/25 bg-gradient-to-b from-slate-900/90 to-black/40 p-6 shadow-lg shadow-purple-900/20"
-        aria-label="AI chat"
-      >
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-600/30 ring-1 ring-purple-400/30">
-            <MessageCircle className="h-5 w-5 text-purple-200" aria-hidden />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-white">Ask the assistant</h2>
-            <p className="text-xs text-slate-400">
-              Demo replies for now — type a question or use a quick prompt. Live answers will use your org data when connected.
-            </p>
-          </div>
-        </div>
-
+      {/* Task 4: command bar — keyword lookup only, not an LLM. Visible on every tab. */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
         <div
-          className="mb-4 max-h-[min(360px,50vh)] min-h-[200px] overflow-y-auto rounded-2xl border border-slate-700/60 bg-black/30 px-4 py-3"
-          role="log"
-          aria-live="polite"
+          className="flex flex-col gap-2 p-2 rounded-2xl sm:flex-row sm:items-center"
+          style={AXIOM.containers.list}
         >
-          {messages.length === 0 && !sending && (
-            <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-              <p className="text-sm text-slate-300">No messages yet</p>
-              <p className="max-w-md text-xs text-slate-500">
-                Start a conversation about your finances. Answers below the fold are sample dashboards until your data is connected.
-              </p>
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                {CHAT_QUICK_PROMPTS.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => void handleSend(q)}
-                    disabled={sending}
-                    className="rounded-full border border-slate-600 bg-slate-800/80 px-3 py-1.5 text-xs text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.length === 0 && sending && (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400" aria-live="polite">
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-              <span>Sending your message…</span>
-            </div>
-          )}
-
-          <ul className="space-y-3">
-            {messages.map((m) => (
-              <li
-                key={m.id}
-                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                    m.role === 'user'
-                      ? 'bg-purple-600/35 text-white ring-1 ring-purple-400/30'
-                      : 'border border-slate-600/80 bg-slate-900/80 text-slate-100'
-                  }`}
-                >
-                  {m.content}
-                  {m.role === 'assistant' && m.suggestions && m.suggestions.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-600/50 pt-3">
-                      {m.suggestions.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => void handleSend(s)}
-                          disabled={sending}
-                          className="rounded-full border border-slate-600 bg-transparent px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {sending && messages.length > 0 && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              <span>Thinking…</span>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
-        {sendError && (
-          <div
-            className="mb-3 rounded-xl border border-amber-500/40 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
-            role="alert"
-          >
-            {sendError}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <textarea
-              ref={inputRef}
-              id="ai-chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+            <input
+              type="text"
+              value={commandInput}
+              onChange={(e) => {
+                setCommandInput(e.target.value);
+                if (commandMessage) setCommandMessage(null);
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter') {
                   e.preventDefault();
-                  void handleSend();
+                  handleCommandSubmit();
                 }
               }}
-              placeholder="Ask about cash flow, expenses, or margins…"
-              disabled={sending}
-              rows={3}
-              maxLength={CHAT_INPUT_MAX}
-              aria-describedby="ai-chat-input-hint"
-              className="min-h-[88px] w-full resize-y rounded-xl border border-slate-600 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 disabled:opacity-60"
+              placeholder="Try 'loans' or 'add expense'..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm"
+              style={{
+                background: AXIOM.inputs.background,
+                border: AXIOM.inputs.border,
+                color: AXIOM.inputs.color,
+              }}
             />
-            <div
-              id="ai-chat-input-hint"
-              className="flex flex-wrap items-center justify-between gap-2 px-0.5 text-xs text-slate-500"
-            >
-              <span className={input.length > CHAT_SOFT_WARN ? 'text-amber-200/85' : 'text-slate-600'}>
-                {input.length > CHAT_SOFT_WARN
-                  ? 'Long messages may feel slower in the demo. Consider shortening.'
-                  : '\u00a0'}
-              </span>
-              <span
-                className={`tabular-nums ${input.length > CHAT_SOFT_WARN ? 'text-amber-200/90' : ''}`}
-              >
-                {input.length} / {CHAT_INPUT_MAX}
-              </span>
-            </div>
           </div>
-          <button
+          <motion.button
             type="button"
-            onClick={() => void handleSend()}
-            disabled={sending || !input.trim() || input.length > CHAT_INPUT_MAX}
-            className="inline-flex h-11 min-w-[100px] shrink-0 items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 text-sm font-medium text-white transition-opacity hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleCommandSubmit}
+            className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+            style={AXIOM.buttons.primary}
           >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Send
-          </button>
+            Go
+            <ArrowRight className="size-4" />
+          </motion.button>
         </div>
-      </motion.section>
+        <p className="text-xs text-slate-500 mt-1.5 px-1">
+          {commandMessage ?? "Keyword search across common pages — not an AI, just text matching."}
+        </p>
+      </motion.div>
+
+      {/* 3-tab structure (Task 1) */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex gap-2 p-2 rounded-2xl"
+        style={AXIOM.containers.list}
+      >
+        {tabButtons.map((btn) => (
+          <motion.button
+            key={btn.id}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setActiveTab(btn.id)}
+            className="flex-1 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all"
+            style={activeTab === btn.id ? AXIOM.buttons.primary : AXIOM.buttons.secondary}
+          >
+            <btn.icon className="size-4" />
+            {btn.label}
+          </motion.button>
+        ))}
+      </motion.div>
+
+      {activeTab === 'ask' && (
+      <>
+      {/* ORG-P04: chat panel — send path + empty state + errors in UI */}
+      <AiChatPanel
+        title="Ask the assistant"
+        subtitle="Demo replies for now — type a question or use a quick prompt. Live answers will use your org data when connected."
+        quickPrompts={CHAT_QUICK_PROMPTS}
+        getReply={matchDemoReply}
+        placeholder="Ask about cash flow, expenses, or margins…"
+        emptyStateHint="Start a conversation about your finances. Answers below the fold are sample dashboards until your data is connected."
+      />
 
       {/* Current Situation - Dashboard Style */}
       <motion.div
@@ -780,17 +816,18 @@ export function AIFinancialAssistant() {
                   </div>
                 </div>
                 {insight.actionable && (
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-white ml-4"
+                  <button
+                    type="button"
+                    disabled
+                    title="Connect a live AI provider under AI Assistant → Integrations to enable actions on insights"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white/50 ml-4 cursor-not-allowed opacity-50"
                     style={{
                       background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3))',
                       border: '1px solid rgba(168, 85, 247, 0.5)',
                     }}
                   >
                     Take Action
-                  </motion.button>
+                  </button>
                 )}
               </div>
             </motion.div>
@@ -918,6 +955,144 @@ export function AIFinancialAssistant() {
           </div>
         </div>
       </motion.div>
+      </>
+      )}
+
+      {/* Task 2: real, computed Insights tab */}
+      {activeTab === 'insights' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          {insightCards.length === 0 ? (
+            <div
+              className="p-10 rounded-2xl text-center text-slate-400 text-sm"
+              style={AXIOM.containers.list}
+            >
+              Nothing needs your attention right now.
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              {insightCards.map((card, idx) => (
+                <motion.div
+                  key={card.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + idx * 0.08 }}
+                  className="p-6 rounded-2xl"
+                  style={AXIOM.containers.list}
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                      style={{
+                        background: AXIOM.iconBoxes[card.color],
+                        boxShadow:
+                          card.color === 'red' ? AXIOM.shadows.iconRed :
+                          card.color === 'amber' ? AXIOM.shadows.iconAmber :
+                          card.color === 'purple' ? AXIOM.shadows.iconPurple :
+                          AXIOM.shadows.iconCyan,
+                      }}
+                    >
+                      <card.icon className="size-6 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-white mb-1">{card.title}</h3>
+                      <p className="text-sm text-slate-400 mb-4">{card.description}</p>
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => goToOrgView?.(card.view)}
+                        className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+                        style={AXIOM.buttons.secondary}
+                      >
+                        Go to {card.actionLabel}
+                        <ArrowRight className="size-4" />
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Task 3: real Activity tab, backed by auditService */}
+      {activeTab === 'activity' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="p-6 rounded-2xl"
+          style={AXIOM.containers.list}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-white">Recent Activity</h3>
+          </div>
+
+          {activityLoading && activityEntries.length === 0 ? (
+            <div className="p-10 rounded-2xl text-center text-slate-400 text-sm" style={AXIOM.containers.item}>
+              Loading activity…
+            </div>
+          ) : activityEntries.length === 0 ? (
+            <div className="p-10 rounded-2xl text-center text-slate-400 text-sm" style={AXIOM.containers.item}>
+              No activity yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activityEntries.map((entry) => {
+                const actionLower = entry.action.toLowerCase();
+                const category = actionLower.includes('invit')
+                  ? 'invite'
+                  : actionLower.includes('role')
+                  ? 'role'
+                  : actionLower.includes('permission')
+                  ? 'permission'
+                  : 'default';
+                return (
+                  <div
+                    key={entry.id}
+                    className="p-4 rounded-xl flex items-start gap-4"
+                    style={AXIOM.containers.item}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: category === 'invite' ? AXIOM.iconBoxes.cyan :
+                                   category === 'permission' ? AXIOM.iconBoxes.purple :
+                                   category === 'role' ? AXIOM.iconBoxes.amber :
+                                   AXIOM.iconBoxes.green,
+                        boxShadow: category === 'invite' ? AXIOM.shadows.iconCyan :
+                                  category === 'permission' ? AXIOM.shadows.iconPurple :
+                                  category === 'role' ? AXIOM.shadows.iconAmber :
+                                  AXIOM.shadows.iconGreen,
+                      }}
+                    >
+                      {category === 'invite' && <Mail className="size-5 text-white" />}
+                      {category === 'permission' && <Shield className="size-5 text-white" />}
+                      {category === 'role' && <Crown className="size-5 text-white" />}
+                      {category === 'default' && <Activity className="size-5 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-white font-medium">{entry.userName}</p>
+                          <p className="text-sm text-slate-400">{entry.action}</p>
+                          <p className="text-xs text-slate-500 mt-1">{entry.details}</p>
+                        </div>
+                        <span className="text-xs text-slate-500 shrink-0">{formatActivityTimestamp(entry.timestamp)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </motion.div>
+      )}
     </div>
   );
 }

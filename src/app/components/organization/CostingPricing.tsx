@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { formatCurrency } from '@/lib/formatters';
@@ -49,6 +50,7 @@ interface CommissionStructure {
 }
 
 export function CostingPricing() {
+  const orgCurrency = useOrgCurrency();
   const { theme } = useTheme();
   const svc = useOrgServices();
 
@@ -240,7 +242,7 @@ export function CostingPricing() {
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Cost/Hour</p>
-                  <p className="text-lg font-bold text-white">{formatCurrency(dept.costPerHour, 'PKR')}</p>
+                  <p className="text-lg font-bold text-white">{formatCurrency(dept.costPerHour, orgCurrency)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Headcount</p>
@@ -254,16 +256,16 @@ export function CostingPricing() {
               <div className="pt-3 space-y-2" style={{ borderTop: '1px solid rgba(148, 163, 184, 0.2)' }}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-400">Revenue</span>
-                  <span className="text-sm text-emerald-400 font-medium">{formatCurrency(dept.monthlyRevenue, 'PKR')}</span>
+                  <span className="text-sm text-emerald-400 font-medium">{formatCurrency(dept.monthlyRevenue, orgCurrency)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-400">Cost</span>
-                  <span className="text-sm text-amber-400 font-medium">{formatCurrency(dept.monthlyCost, 'PKR')}</span>
+                  <span className="text-sm text-amber-400 font-medium">{formatCurrency(dept.monthlyCost, orgCurrency)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-400">Profit</span>
                   <span className={`text-sm font-bold ${dept.profit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {formatCurrency(dept.profit, 'PKR')}
+                    {formatCurrency(dept.profit, orgCurrency)}
                   </span>
                 </div>
               </div>
@@ -317,7 +319,7 @@ export function CostingPricing() {
                   <tr key={p.projectId} className="border-b border-slate-800/80 text-slate-200">
                     <td className="py-3 pr-4 font-medium text-white">{p.projectName}</td>
                     <td className="py-3 pr-4">{p.clientName}</td>
-                    <td className="py-3 pr-4 text-right tabular-nums">{formatCurrency(p.quotedAmount, 'PKR')}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{formatCurrency(p.quotedAmount, orgCurrency)}</td>
                     <td className={`py-3 pr-4 text-right tabular-nums ${p.profitMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {p.profitMargin.toFixed(1)}%
                     </td>
@@ -450,16 +452,16 @@ export function CostingPricing() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 rounded-xl" style={AXIOM.containers.item}>
                   <p className="text-xs text-slate-400 mb-1">Revenue</p>
-                  <p className="text-xl font-bold text-white">{formatCurrency(quoteAnalysis.revenue, 'PKR')}</p>
+                  <p className="text-xl font-bold text-white">{formatCurrency(quoteAnalysis.revenue, orgCurrency)}</p>
                 </div>
                 <div className="p-4 rounded-xl" style={AXIOM.containers.item}>
                   <p className="text-xs text-slate-400 mb-1">Estimated Cost</p>
-                  <p className="text-xl font-bold text-amber-400">{formatCurrency(quoteAnalysis.cost, 'PKR')}</p>
+                  <p className="text-xl font-bold text-amber-400">{formatCurrency(quoteAnalysis.cost, orgCurrency)}</p>
                 </div>
                 <div className="p-4 rounded-xl" style={AXIOM.containers.item}>
                   <p className="text-xs text-slate-400 mb-1">Expected Profit</p>
                   <p className={`text-xl font-bold ${quoteAnalysis.profit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {formatCurrency(quoteAnalysis.profit, 'PKR')}
+                    {formatCurrency(quoteAnalysis.profit, orgCurrency)}
                   </p>
                 </div>
                 <div className="p-4 rounded-xl" style={AXIOM.containers.item}>
@@ -479,7 +481,7 @@ export function CostingPricing() {
                   }}
                 >
                   <p className="text-sm text-amber-400 font-medium">
-                    Recommendation: consider increasing the quote to at least {formatCurrency(quoteAnalysis.cost / 0.75, 'PKR')} for a 25% margin.
+                    Recommendation: consider increasing the quote to at least {formatCurrency(quoteAnalysis.cost / 0.75, orgCurrency)} for a 25% margin.
                   </p>
                 </div>
               )}

@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Slider } from '../ui/slider';
@@ -36,6 +37,7 @@ function safeDiv(n: number, d: number, fallback = 0): number {
 }
 
 export function WhatIfSimulator() {
+  const orgCurrency = useOrgCurrency();
   const svc = useOrgServices();
 
   // Service-backed: pull dashboard summary for real baseline metrics
@@ -378,10 +380,10 @@ export function WhatIfSimulator() {
         >
           <p className="text-slate-400 text-sm mb-1">Projected Revenue</p>
           <p className="text-2xl font-bold text-white">
-            {formatCurrency(currentImpact.revenue, 'PKR')}
+            {formatCurrency(currentImpact.revenue, orgCurrency)}
           </p>
           <p className="text-xs text-emerald-400 mt-1">
-            +{formatCurrency(currentImpact.revenue - baselineImpact.revenue, 'PKR')} vs baseline
+            +{formatCurrency(currentImpact.revenue - baselineImpact.revenue, orgCurrency)} vs baseline
           </p>
         </motion.div>
 
@@ -394,10 +396,10 @@ export function WhatIfSimulator() {
         >
           <p className="text-slate-400 text-sm mb-1">Projected Expense</p>
           <p className="text-2xl font-bold text-white">
-            {formatCurrency(currentImpact.expense, 'PKR')}
+            {formatCurrency(currentImpact.expense, orgCurrency)}
           </p>
           <p className="text-xs text-red-400 mt-1">
-            +{formatCurrency(currentImpact.expense - baselineImpact.expense, 'PKR')} vs baseline
+            +{formatCurrency(currentImpact.expense - baselineImpact.expense, orgCurrency)} vs baseline
           </p>
         </motion.div>
 
@@ -410,7 +412,7 @@ export function WhatIfSimulator() {
         >
           <p className="text-slate-400 text-sm mb-1">Projected Profit</p>
           <p className={`text-2xl font-bold ${currentImpact.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {formatCurrency(currentImpact.profit, 'PKR')}
+            {formatCurrency(currentImpact.profit, orgCurrency)}
           </p>
           <p className={`text-xs mt-1 ${currentImpact.profitChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {currentImpact.profitChangePercent >= 0 ? '+' : ''}{currentImpact.profitChangePercent.toFixed(1)}% vs baseline
@@ -579,13 +581,13 @@ export function WhatIfSimulator() {
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Revenue/Head</span>
               <span className="text-sm text-white font-medium">
-                {formatCurrency(currentImpact.revenuePerHead, 'PKR')}
+                {formatCurrency(currentImpact.revenuePerHead, orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Profit/Head</span>
               <span className="text-sm text-cyan-400 font-medium">
-                {formatCurrency(currentImpact.profitPerHead, 'PKR')}
+                {formatCurrency(currentImpact.profitPerHead, orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -609,13 +611,13 @@ export function WhatIfSimulator() {
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Break-Even Revenue</span>
               <span className="text-sm text-white font-medium">
-                {formatCurrency(currentImpact.breakEvenRevenue, 'PKR')}
+                {formatCurrency(currentImpact.breakEvenRevenue, orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Revenue Gap</span>
               <span className={`text-sm font-medium ${currentImpact.revenueGap >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {formatCurrency(currentImpact.revenueGap, 'PKR')}
+                {formatCurrency(currentImpact.revenueGap, orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -639,19 +641,19 @@ export function WhatIfSimulator() {
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">New Hire Salaries</span>
               <span className="text-sm text-red-400 font-medium">
-                {formatCurrency(scenario.newHires * scenario.avgSalary, 'PKR')}
+                {formatCurrency(scenario.newHires * scenario.avgSalary, orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Base Expense Change</span>
               <span className="text-sm text-red-400 font-medium">
-                {formatCurrency(effectiveBase.monthlyExpense * (scenario.expenseChange / 100), 'PKR')}
+                {formatCurrency(effectiveBase.monthlyExpense * (scenario.expenseChange / 100), orgCurrency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-slate-400">Total New Expense</span>
               <span className="text-sm text-red-400 font-medium">
-                {formatCurrency(currentImpact.expense - baselineImpact.expense, 'PKR')}
+                {formatCurrency(currentImpact.expense - baselineImpact.expense, orgCurrency)}
               </span>
             </div>
           </div>
@@ -689,7 +691,7 @@ export function WhatIfSimulator() {
                 borderRadius: '12px',
                 color: '#fff'
               }}
-              formatter={(value: any) => formatCurrency(value, 'PKR')}
+              formatter={(value: any) => formatCurrency(value, orgCurrency)}
             />
             <Legend />
             <Line
@@ -756,7 +758,7 @@ export function WhatIfSimulator() {
                     <div className="flex justify-between">
                       <span className="text-slate-400">Profit:</span>
                       <span className={impact.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                        {formatCurrency(impact.profit, 'PKR')}
+                        {formatCurrency(impact.profit, orgCurrency)}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -797,9 +799,9 @@ export function WhatIfSimulator() {
             <p className="text-lg font-bold text-white mb-3">AI Insights</p>
             <div className="space-y-2 text-sm text-slate-300">
               {currentImpact.profit > baselineImpact.profit ? (
-                <p>✓ This scenario increases monthly profit by {formatCurrency(currentImpact.profitChange, 'PKR')} ({currentImpact.profitChangePercent.toFixed(1)}%)</p>
+                <p>✓ This scenario increases monthly profit by {formatCurrency(currentImpact.profitChange, orgCurrency)} ({currentImpact.profitChangePercent.toFixed(1)}%)</p>
               ) : (
-                <p>⚠ This scenario decreases monthly profit by {formatCurrency(Math.abs(currentImpact.profitChange), 'PKR')} ({Math.abs(currentImpact.profitChangePercent).toFixed(1)}%)</p>
+                <p>⚠ This scenario decreases monthly profit by {formatCurrency(Math.abs(currentImpact.profitChange), orgCurrency)} ({Math.abs(currentImpact.profitChangePercent).toFixed(1)}%)</p>
               )}
               
               {currentImpact.margin > 30 ? (
@@ -811,11 +813,11 @@ export function WhatIfSimulator() {
               )}
               
               {scenario.newHires > 0 && (
-                <p>→ Adding {scenario.newHires} team members increases monthly expense by {formatCurrency(scenario.newHires * scenario.avgSalary, 'PKR')}</p>
+                <p>→ Adding {scenario.newHires} team members increases monthly expense by {formatCurrency(scenario.newHires * scenario.avgSalary, orgCurrency)}</p>
               )}
               
               {currentImpact.revenuePerHead > 140000 && (
-                <p>✓ Revenue per head of {formatCurrency(currentImpact.revenuePerHead, 'PKR')} is excellent</p>
+                <p>✓ Revenue per head of {formatCurrency(currentImpact.revenuePerHead, orgCurrency)} is excellent</p>
               )}
             </div>
           </div>

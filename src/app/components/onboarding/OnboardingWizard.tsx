@@ -1,4 +1,15 @@
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  parseCSVFile,
+  autoDetectColumnMapping,
+  processCSVData,
+  type ImportedTransaction,
+} from '@/lib/importUtils';
+import { classifyTransaction } from '@/lib/classificationEngine';
+import { dataStore } from '@/services/dataStore';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -15,6 +26,7 @@ import {
   Rocket
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 const STEP_ICONS = {
   welcome: Sparkles,
@@ -40,8 +52,12 @@ export function OnboardingWizard() {
     nextStep, 
     previousStep, 
     skipOnboarding,
-    completeStep 
+    completeStep
   } = useOnboarding();
+
+  /** Rows parsed from the CSV the user picks in step 3, shown for real in step 4.
+   *  Declared before the early return below so hook order stays stable. */
+  const [importedRows, setImportedRows] = useState<ImportedTransaction[] | null>(null);
 
   if (!isOnboarding) return null;
 
@@ -66,27 +82,27 @@ export function OnboardingWizard() {
           transition={{ duration: 0.3 }}
           className="w-full max-w-2xl"
         >
-          <Card className="bg-slate-900 border-white/10 shadow-2xl">
-            <CardContent className="p-8">
+          <Card className="bg-slate-900 border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <CardContent className="p-4 sm:p-8">
               {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div 
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center`}
+              <div className="flex items-center justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center shrink-0`}
                     style={{
                       boxShadow: '0 10px 30px -10px rgba(139, 92, 246, 0.6)',
                     }}
                   >
-                    <Icon className="w-6 h-6 text-white" />
+                    <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-slate-400">Step {currentStep + 1} of {steps.length}</p>
-                    <h2 className="text-xl font-bold text-white">{step.title}</h2>
+                    <h2 className="text-lg sm:text-xl font-bold text-white truncate">{step.title}</h2>
                   </div>
                 </div>
                 <button
                   onClick={skipOnboarding}
-                  className="text-slate-400 hover:text-white transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -99,7 +115,7 @@ export function OnboardingWizard() {
                   {steps.map((s, idx) => (
                     <div
                       key={s.id}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
+                      className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all shrink-0 ${
                         idx < currentStep
                           ? 'bg-green-500 text-white'
                           : idx === currentStep
@@ -121,33 +137,33 @@ export function OnboardingWizard() {
               <div className="mb-8">
                 {step.id === 'welcome' && <WelcomeStep />}
                 {step.id === 'connect-bank' && <ConnectBankStep />}
-                {step.id === 'import-statements' && <ImportStatementsStep />}
-                {step.id === 'review-categories' && <ReviewCategoriesStep />}
+                {step.id === 'import-statements' && <ImportStatementsStep onParsed={setImportedRows} />}
+                {step.id === 'review-categories' && <ReviewCategoriesStep rows={importedRows} />}
                 {step.id === 'explore-insights' && <ExploreInsightsStep />}
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Button
                   variant="outline"
                   onClick={previousStep}
                   disabled={currentStep === 0}
-                  className="border-white/10 hover:bg-white/5 text-white"
+                  className="border-white/10 hover:bg-white/5 text-white order-3 sm:order-none w-full sm:w-auto"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back
                 </Button>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                   <Button
                     variant="outline"
                     onClick={skipOnboarding}
-                    className="border-white/10 hover:bg-white/5 text-slate-400"
+                    className="border-white/10 hover:bg-white/5 text-slate-400 flex-1 sm:flex-initial"
                   >
                     Skip Tour
                   </Button>
                   <Button
                     onClick={handleContinue}
-                    className={`bg-gradient-to-r ${colorClass} hover:opacity-90 text-white`}
+                    className={`bg-gradient-to-r ${colorClass} hover:opacity-90 text-white flex-1 sm:flex-initial`}
                   >
                     {currentStep === steps.length - 1 ? (
                       <>
@@ -193,7 +209,7 @@ function WelcomeStep() {
         </p>
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 bg-white/5 rounded-lg border border-white/10">
           <Brain className="w-8 h-8 text-blue-400 mb-2" />
           <h4 className="text-white font-medium mb-1">AI-Powered</h4>
@@ -267,23 +283,102 @@ function ConnectBankStep() {
   );
 }
 
-function ImportStatementsStep() {
+function ImportStatementsStep({ onParsed }: { onParsed: (rows: ImportedTransaction[]) => void }) {
+  const { completeStep, nextStep } = useOnboarding();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+
+  const openFilePicker = () => fileInputRef.current?.click();
+
+  /** Really parses the chosen CSV with the same pipeline the full importer uses
+   *  (parseCSVFile → autoDetectColumnMapping → processCSVData), then classifies each row,
+   *  so step 4 shows the user's actual transactions instead of canned samples. */
+  const handleFilePicked = async (file: File) => {
+    if (!/\.csv$/i.test(file.name)) {
+      toast.error('Please choose a .csv file here — Excel and PDF are supported on the full import screen.');
+      return;
+    }
+
+    setParsing(true);
+    try {
+      const data = await parseCSVFile(file);
+      if (data.length < 2) {
+        toast.error('That file has no data rows we could read.');
+        return;
+      }
+
+      const headers = data[0].map(h => String(h ?? '').trim());
+      const mapping = autoDetectColumnMapping(headers);
+      const rows = processCSVData(data, mapping, headers);
+
+      if (rows.length === 0) {
+        toast.error("We couldn't find date/description/amount columns in that file.");
+        return;
+      }
+
+      // Real classification against the org's categories + their learned patterns.
+      const categories = dataStore.categories;
+      const previous = dataStore.transactions;
+      const classified = rows.map(r => {
+        const result = classifyTransaction(r.narration, r.amount, r.type, categories, previous, []);
+        return {
+          ...r,
+          suggestedCategory: result.categoryName || undefined,
+          confidence: result.confidence,
+        };
+      });
+
+      onParsed(classified);
+      toast.success(`Parsed ${classified.length} transaction${classified.length === 1 ? '' : 's'} from ${file.name}`);
+      completeStep('import-statements');
+      nextStep();
+    } catch (e) {
+      console.error(e);
+      toast.error('Could not read that file. Please check it is a valid CSV.');
+    } finally {
+      setParsing(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">Upload your first bank statement or CSV file to get started.</p>
-      
-      <div className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="sr-only"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Reset so picking the same file again still fires a change event.
+          e.target.value = '';
+          if (file) void handleFilePicked(file);
+        }}
+      />
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={openFilePicker}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
+        className="border-2 border-dashed border-white/20 rounded-lg p-12 text-center bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+      >
         <Upload className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
         <h4 className="text-white font-medium mb-2">Drag & Drop Your Statement</h4>
         <p className="text-sm text-slate-400 mb-4">
-          Supports CSV, Excel, PDF, and most bank formats
+          Pick a CSV file — we'll read it and categorize the real rows on the next step
         </p>
-        <Button className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white">
-          Choose File
+        <Button
+          disabled={parsing}
+          onClick={(e) => { e.stopPropagation(); openFilePicker(); }}
+          className="bg-gradient-to-r from-emerald-500 to-green-500 hover:opacity-90 text-white disabled:opacity-60"
+        >
+          {parsing ? 'Reading file…' : 'Choose File'}
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
         <div className="text-center p-3 bg-white/5 rounded-lg">
           <p className="text-2xl font-bold text-white mb-1">1.</p>
           <p className="text-xs text-slate-400">Upload file</p>
@@ -301,13 +396,68 @@ function ImportStatementsStep() {
   );
 }
 
-function ReviewCategoriesStep() {
+function ReviewCategoriesStep({ rows }: { rows: ImportedTransaction[] | null }) {
+  // Real rows from the CSV picked in step 3 — only fall back to the canned samples below
+  // when the user skipped straight past the upload step without choosing a file.
+  if (rows && rows.length > 0) {
+    return (
+      <div className="space-y-4">
+        <p className="text-slate-300 text-lg mb-6">
+          We read <span className="text-white font-medium">{rows.length}</span> transaction{rows.length === 1 ? '' : 's'} from your file and categorized them. Review below.
+        </p>
+
+        <div className="space-y-3 max-h-80 overflow-y-auto">
+          {rows.map((r) => {
+            const confident = (r.confidence ?? 0) >= 60;
+            return (
+              <div key={r.id} className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate">{r.narration}</p>
+                    <p className="text-xs text-slate-400">{r.date}</p>
+                  </div>
+                  <p className={`font-medium shrink-0 ${r.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                    {r.type === 'credit' ? '+' : '-'}{Math.abs(r.amount).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Brain className={`w-4 h-4 ${confident ? 'text-blue-400' : 'text-amber-400'}`} />
+                  <span className="text-xs text-slate-400">
+                    {confident ? 'AI suggested:' : 'Needs your review:'}
+                  </span>
+                  <span className={`text-xs px-2 py-1 rounded border ${
+                    confident
+                      ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                  }`}>
+                    {r.suggestedCategory || 'Uncategorised'}
+                  </span>
+                  {!!r.confidence && (
+                    <span className={`text-xs ${confident ? 'text-green-400' : 'text-amber-400'}`}>
+                      {confident ? '✓ ' : ''}{r.confidence}% confident
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <p className="text-sm text-blue-200">
+            💡 <strong>Smart Learning:</strong> The more you categorize, the smarter the AI becomes!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <p className="text-slate-300 text-lg mb-6">Our AI has automatically categorized your transactions. Review and teach it your preferences.</p>
-      
+      <p className="text-slate-300 text-lg mb-6">Here's an example of how our AI automatically categorizes transactions — go back a step and pick a CSV to see it run on your own data.</p>
+
       <div className="space-y-3">
-        {/* Sample transactions */}
+        {/* Sample transactions — shown only when no file was picked in the previous step */}
         <div className="bg-white/5 border border-white/10 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <div>
@@ -374,18 +524,33 @@ function ReviewCategoriesStep() {
 }
 
 function ExploreInsightsStep() {
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading } = useAuth();
+  const { skipOnboarding, completeStep, nextStep } = useOnboarding();
+
+  const goTo = (view: string) => {
+    // Same confirmed-auth guard as ImportStatementsStep — see comment there.
+    if (!authLoading && user) {
+      skipOnboarding();
+      navigate(`/dashboard?view=${view}`);
+    } else {
+      completeStep('explore-insights');
+      nextStep();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-slate-300 text-lg mb-6">You're all set! Here's what you can do now:</p>
-      
-      <div className="grid grid-cols-2 gap-4">
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg p-4">
           <TrendingUp className="w-8 h-8 text-purple-400 mb-3" />
           <h4 className="text-white font-medium mb-2">Profit Intelligence</h4>
           <p className="text-xs text-slate-400 mb-3">
             See department profitability, client analysis, and project margins
           </p>
-          <Button size="sm" className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs">
+          <Button onClick={() => goTo('profit-intelligence')} size="sm" className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -396,7 +561,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Predict your cash position for the next 90 days
           </p>
-          <Button size="sm" className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs">
+          <Button onClick={() => goTo('forecast')} size="sm" className="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -407,7 +572,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Model different scenarios and see financial impact
           </p>
-          <Button size="sm" className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs">
+          <Button onClick={() => goTo('simulator')} size="sm" className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs">
             Explore →
           </Button>
         </div>
@@ -418,7 +583,7 @@ function ExploreInsightsStep() {
           <p className="text-xs text-slate-400 mb-3">
             Ask questions and get instant financial insights
           </p>
-          <Button size="sm" className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs">
+          <Button onClick={() => goTo('ai-assistant')} size="sm" className="bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs">
             Chat Now →
           </Button>
         </div>

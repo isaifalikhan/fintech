@@ -11,32 +11,92 @@ export function createReportsRouter(): Router {
 
   r.get('/dashboard', (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const txns = store.transactions.filter(t => t.organizationId === orgId);
+    const allTxns = store.transactions.filter(t => t.organizationId === orgId);
     const accounts = store.accounts.filter(a => a.organizationId === orgId);
+
+    // Mirrors src/services/reportService.ts — no FX conversion exists in this app, so
+    // revenue/expense/profit only sum transactions in the org's own currency; a mismatched
+    // transaction is reported as excluded rather than silently summed in as if equivalent.
+    const org = store.organizations.find(o => o.id === orgId);
+    const revenueExpenseCurrency = org?.currency || 'PKR';
+    const txns = allTxns.filter(t => t.currency === revenueExpenseCurrency);
+    const otherCurrencyTransactionCount = allTxns.length - txns.length;
 
     const totalRevenue = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
+    // Mirrors src/services/reportService.ts — "Monthly Profit" needs an actual current-month
+    // figure, not the lifetime `netProfit` above. Trend badges compare vs. the prior calendar
+    // month; null (not 0%) when the prior month has nothing to compare against.
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date();
+    const currentMonthKey = monthKey(now);
+    const previousMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const inMonth = (t: (typeof txns)[number], key: string) => monthKey(new Date(t.date)) === key;
+
+    const currentMonthTxns = txns.filter(t => inMonth(t, currentMonthKey));
+    const previousMonthTxns = txns.filter(t => inMonth(t, previousMonthKey));
+
+    const sumCredits = (rows: typeof txns) => rows.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const sumDebits = (rows: typeof txns) => rows.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    const monthlyRevenue = sumCredits(currentMonthTxns);
+    const monthlyExpenses = sumDebits(currentMonthTxns);
+    const monthlyProfit = monthlyRevenue - monthlyExpenses;
+
+    const prevMonthlyRevenue = sumCredits(previousMonthTxns);
+    const prevMonthlyExpenses = sumDebits(previousMonthTxns);
+    const prevMonthlyProfit = prevMonthlyRevenue - prevMonthlyExpenses;
+
+    const pctChange = (curr: number, prev: number): number | null =>
+      prev === 0 ? null : Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10;
+
+    const revenueChange = pctChange(monthlyRevenue, prevMonthlyRevenue);
+    const expenseChange = pctChange(monthlyExpenses, prevMonthlyExpenses);
+    const profitChange = pctChange(monthlyProfit, prevMonthlyProfit);
+
+    // Mirrors src/services/reportService.ts — real cash sits on bank accounts/wallets, not on the
+    // chart-of-accounts mirror (whose balances stay 0 unless journalled), and receivables/payables
+    // fall back to the Loans module when no AR/AP chart account exists.
+    const orgBankAccounts = store.bankAccounts.filter(b => b.organizationId === orgId && b.isActive);
     const cashAccounts = accounts.filter(a => a.subtype === 'bank_account' || a.subtype === 'current_asset');
-    const cashOnHand = cashAccounts.reduce((s, a) => s + a.balance, 0);
+    const cashOnHand = orgBankAccounts.length > 0
+      ? orgBankAccounts.reduce((s, b) => s + (Number(b.balance) || 0), 0)
+      : cashAccounts.reduce((s, a) => s + a.balance, 0);
     const arAccount = accounts.find(a => a.name.toLowerCase().includes('receivable'));
     const apAccount = accounts.find(a => a.name.toLowerCase().includes('payable'));
-    const pendingTransactions = txns.filter(t => t.status === 'pending').length;
+    const openLoans = store.loans.filter(
+      l => l.organizationId === orgId && l.status !== 'closed' && l.status !== 'written_off',
+    );
+    const outstanding = (direction: 'to_receive' | 'to_pay') =>
+      openLoans
+        .filter(l => l.type === direction)
+        .reduce((s, l) => s + Math.abs(Number(l.remainingBalance ?? l.amount) || 0), 0);
+    const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
+    const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
+    // Pending count is a review queue, not a money sum — keep it over every transaction
+    // regardless of currency, unlike the revenue/expense totals above.
+    const pendingTransactions = allTxns.filter(t => t.status === 'pending').length;
 
     ok(res, {
       totalRevenue,
       totalExpenses,
       netProfit,
       profitMargin: Math.round(profitMargin * 10) / 10,
+      monthlyRevenue,
+      monthlyExpenses,
+      monthlyProfit,
       cashOnHand,
-      accountsReceivable: arAccount?.balance || 0,
-      accountsPayable: apAccount?.balance || 0,
+      accountsReceivable,
+      accountsPayable,
       pendingTransactions,
-      revenueChange: 12.7,
-      expenseChange: 8.3,
-      profitChange: 16.7,
+      revenueChange,
+      expenseChange,
+      profitChange,
+      revenueExpenseCurrency,
+      otherCurrencyTransactionCount,
     });
   });
 
@@ -96,17 +156,8 @@ export function createReportsRouter(): Router {
         };
       });
 
-    if (result.length < months) {
-      const supplemental = [
-        { month: 'Jan', inflow: 125000, outflow: 89000, net: 36000 },
-        { month: 'Feb', inflow: 142000, outflow: 95000, net: 47000 },
-        { month: 'Mar', inflow: 138000, outflow: 92000, net: 46000 },
-        { month: 'Apr', inflow: 165000, outflow: 102000, net: 63000 },
-        { month: 'May', inflow: 158000, outflow: 98000, net: 60000 },
-        { month: 'Jun', inflow: 178000, outflow: 108000, net: 70000 },
-      ];
-      return ok(res, supplemental.slice(0, months));
-    }
+    // Mirrors src/services/reportService.ts — only real months, never padded with invented
+    // figures when the org has less history than requested.
     ok(res, result);
   });
 

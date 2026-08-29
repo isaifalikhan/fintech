@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { formatCurrency } from '@/lib/formatters';
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
@@ -68,6 +69,7 @@ function safeFinite(n: unknown, fallback: number): number {
 }
 
 export function OrganizationDashboard() {
+  const orgCurrency = useOrgCurrency();
   const navigate = useNavigate();
   const goToOrgView = useOrgWorkspaceNav();
   const { theme = 'dark' } = useTheme();
@@ -114,6 +116,11 @@ export function OrganizationDashboard() {
     error: txnError,
     refetch: refetchTxns,
   } = useService(() => svc.transactions.getAll({ pageSize: 20 }), [svc.orgId]);
+  const { data: deptProfitability } = useServiceArray(
+    () => svc.departments.getProfitability(),
+    [svc.orgId],
+    ['departments', 'transactions'],
+  );
 
   const refreshDashboard = () => {
     void refetchAccounts();
@@ -134,7 +141,18 @@ export function OrganizationDashboard() {
       : dashboardFallbackAnalytics.netWorth;
 
   const cashInHand = safeFinite(kpis?.cashOnHand, dashboardFallbackAnalytics.cashInHand);
-  const monthlyProfit = safeFinite(kpis?.netProfit, dashboardFallbackAnalytics.monthlyProfit);
+  const monthlyProfit = safeFinite(kpis?.monthlyProfit, dashboardFallbackAnalytics.monthlyProfit);
+
+  // Trend badge for the one KPI with a real period-over-period figure behind it. Total Balance,
+  // Cash in Hand and Net Worth are point-in-time balances with no stored history to diff against —
+  // fabricating a "% change" for those isn't honest, so they render with no badge at all.
+  const profitChangeBadge =
+    kpis?.profitChange != null
+      ? {
+          percentage: `${kpis.profitChange >= 0 ? '+' : ''}${kpis.profitChange.toFixed(1)}%`,
+          trend: (kpis.profitChange >= 0 ? 'up' : 'down') as const,
+        }
+      : {};
 
   const netWorthFromSummary =
     kpis != null
@@ -175,15 +193,24 @@ export function OrganizationDashboard() {
     }));
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Real monthly revenue / expenses / profit from the org's own transactions. This was a
+  // synthetic sine-wave series (`2000000 + Math.sin(i * 0.5) * 500000`) that looked like a real
+  // 12-month trend but was identical for every organization.
+  const { data: cashFlowMonths } = useServiceArray(
+    () => svc.reports.getCashFlow(12),
+    [svc.orgId],
+    ['transactions'],
+  );
+
   const profitDataFull = useMemo(
     () =>
-      Array.from({ length: 12 }, (_, i) => ({
-        name: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
-        Revenue: 2000000 + Math.sin(i * 0.5) * 500000 + i * 150000,
-        Expenses: 1200000 + Math.cos(i * 0.7) * 300000 + i * 80000,
-        Profit: 800000 + Math.sin(i * 0.3) * 400000 + i * 100000,
+      cashFlowMonths.map(m => ({
+        name: m.month,
+        Revenue: safeFinite(m.inflow, 0),
+        Expenses: safeFinite(m.outflow, 0),
+        Profit: safeFinite(m.net, 0),
       })),
-    [],
+    [cashFlowMonths],
   );
 
   const profitData = useMemo(() => {
@@ -193,7 +220,7 @@ export function OrganizationDashboard() {
       case '1W':
         return tail(2);
       case '1M':
-        return tail(1);
+        return tail(2);
       case '3M':
         return tail(3);
       case '6M':
@@ -204,13 +231,12 @@ export function OrganizationDashboard() {
     }
   }, [profitDataFull, selectedPeriod]);
 
-  const departmentData = Array.from({ length: 12 }, (_, i) => ({
-    name: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
-    Development: 1500000 + Math.sin(i * 0.5) * 400000 + i * 120000,
-    Design: 800000 + Math.cos(i * 0.7) * 250000 + i * 80000,
-    Marketing: 600000 + Math.sin(i * 0.3) * 200000 + i * 60000,
-    Sales: 1000000 + Math.cos(i * 0.6) * 300000 + i * 90000,
-  }));
+  /** Current per-department revenue snapshot — real data, not a fabricated monthly trend
+      (no monthly-by-department breakdown exists anywhere in this app to draw one honestly). */
+  const departmentData = useMemo(
+    () => (deptProfitability ?? []).map((d) => ({ name: d.departmentName, Revenue: d.revenue })),
+    [deptProfitability],
+  );
 
   // Expense category data for donut chart
   const expenseCategoryData = [
@@ -350,9 +376,7 @@ export function OrganizationDashboard() {
                 icon={TrendingUp}
                 label="Total Balance"
                 value={totalBalance}
-                currency="PKR"
-                percentage="12.5%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0}
               />
 
@@ -360,9 +384,7 @@ export function OrganizationDashboard() {
                 icon={Wallet}
                 label="Cash in Hand"
                 value={cashInHand}
-                currency="PKR"
-                percentage="8.2%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0.1}
               />
 
@@ -370,19 +392,21 @@ export function OrganizationDashboard() {
                 icon={DollarSign}
                 label="Monthly Profit"
                 value={monthlyProfit}
-                currency="PKR"
-                percentage="15.7%"
-                trend="up"
+                currency={orgCurrency}
+                {...profitChangeBadge}
                 delay={0.2}
+                note={
+                  kpis && kpis.otherCurrencyTransactionCount > 0
+                    ? `Excludes ${kpis.otherCurrencyTransactionCount} transaction${kpis.otherCurrencyTransactionCount === 1 ? '' : 's'} in other currencies — no FX conversion yet`
+                    : undefined
+                }
               />
 
               <ModernKPICard
                 icon={BarChart3}
                 label="Net Worth"
                 value={netWorth}
-                currency="PKR"
-                percentage="9.3%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0.3}
               />
             </div>
@@ -485,6 +509,26 @@ export function OrganizationDashboard() {
                     : '1px solid rgba(148, 163, 184, 0.15)',
                 }}
               >
+                {profitData.length < 2 ? (
+                  /* A trend needs at least two points — with one (or zero) months of real history
+                     Recharts draws isolated dots and no line, which reads as "broken/not updating".
+                     Say what's actually going on instead. */
+                  <div className="flex h-full flex-col items-center justify-center text-center gap-2 px-4">
+                    <BarChart3 className="size-8 text-slate-500" />
+                    <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                      {profitDataFull.length === 0
+                        ? 'No transactions yet'
+                        : `Only ${profitDataFull.length} month${profitDataFull.length === 1 ? '' : 's'} of history`}
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-xs">
+                      {profitDataFull.length === 0
+                        ? 'Add or import transactions and your revenue, expenses and profit trend will appear here.'
+                        : profitDataFull.length > profitData.length
+                          ? 'Pick a longer range above to see the trend.'
+                          : 'A trend line needs at least two months of transactions.'}
+                    </p>
+                  </div>
+                ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsComposedChart data={profitData}>
                     <defs>
@@ -519,7 +563,7 @@ export function OrganizationDashboard() {
                       style={{ fontSize: '12px', fontWeight: 600 }}
                       tickLine={false}
                       axisLine={{ stroke: theme === 'dark' ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.3)' }}
-                      tickFormatter={(value) => `₨${(value / 1000).toFixed(0)}K`}
+                      tickFormatter={(value) => formatCurrency(value, orgCurrency, { compact: true })}
                     />
                     <Tooltip 
                       contentStyle={{ 
@@ -541,7 +585,7 @@ export function OrganizationDashboard() {
                         fontSize: '12px',
                         fontWeight: 600
                       }}
-                      formatter={(value: any) => [`₨${(value / 1000).toFixed(1)}K`, '']}
+                      formatter={(value: any) => [formatCurrency(Number(value), orgCurrency), '']}
                     />
                     
                     <Area
@@ -606,6 +650,7 @@ export function OrganizationDashboard() {
                     />
                   </RechartsComposedChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </motion.div>
 
@@ -620,17 +665,25 @@ export function OrganizationDashboard() {
                 iconColor="purple"
                 delay={0.5}
               >
-                <ModernBarChart
-                  data={departmentData.slice(6)} // Last 6 months
-                  dataKeys={[
-                    { key: 'Development', color: MODERN_COLORS.primary, name: 'Development' },
-                    { key: 'Design', color: MODERN_COLORS.secondary, name: 'Design' },
-                    { key: 'Marketing', color: MODERN_COLORS.warning, name: 'Marketing' },
-                    { key: 'Sales', color: MODERN_COLORS.success, name: 'Sales' },
-                  ]}
-                  height={280}
-                  stacked={true}
-                />
+                {departmentData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center gap-2 px-4" style={{ height: 280 }}>
+                    <Users className="size-8 text-slate-500" />
+                    <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                      No departments yet
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-xs">
+                      Add departments under Settings, then assign them to transactions to see revenue by department here.
+                    </p>
+                  </div>
+                ) : (
+                  <ModernBarChart
+                    data={departmentData}
+                    dataKeys={[
+                      { key: 'Revenue', color: MODERN_COLORS.primary, name: 'Revenue' },
+                    ]}
+                    height={280}
+                  />
+                )}
               </ChartContainer>
 
               {/* Expense Categories - Donut Chart */}
@@ -1031,7 +1084,8 @@ export function OrganizationDashboard() {
             <DialogDescription
               className={theme === 'dark' ? 'text-slate-400' : undefined}
             >
-              Upload a CSV or spreadsheet to import transactions.
+              Upload a CSV or PDF bank statement to import transactions. Excel files aren't
+              supported — export as CSV first.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">

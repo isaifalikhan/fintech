@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
-import { formatCurrency } from '@/lib/formatters';
+import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency, formatDateShort } from '@/lib/formatters';
 import { dashboardFallbackAnalytics } from '@/lib/dashboardFallbackAnalytics';
 import { 
   TrendingUp, 
@@ -339,6 +340,7 @@ function upcomingPanelSurface(theme: 'light' | 'dark') {
 /** Shared Upcoming (payments / expenses) panel — desktop column or mobile drawer */
 function UpcomingPanelContent({
   theme,
+  currency,
   totalUpcomingPayments,
   totalUpcomingExpenses,
   upcomingPayments,
@@ -348,6 +350,7 @@ function UpcomingPanelContent({
   dismissStyle = 'close',
 }: {
   theme: 'light' | 'dark';
+  currency: string;
   totalUpcomingPayments: number;
   totalUpcomingExpenses: number;
   upcomingPayments: UpcomingLine[];
@@ -411,7 +414,7 @@ function UpcomingPanelContent({
           >
             <p className="text-emerald-400 text-xs mb-1 uppercase tracking-wider font-bold">Payments</p>
             <p className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-              {formatCurrency(totalUpcomingPayments, 'PKR', { compact: true })}
+              {formatCurrency(totalUpcomingPayments, currency, { compact: true })}
             </p>
           </motion.div>
           <motion.div
@@ -427,7 +430,7 @@ function UpcomingPanelContent({
           >
             <p className="text-red-400 text-xs mb-1 uppercase tracking-wider font-bold">Expenses</p>
             <p className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-              {formatCurrency(totalUpcomingExpenses, 'PKR', { compact: true })}
+              {formatCurrency(totalUpcomingExpenses, currency, { compact: true })}
             </p>
           </motion.div>
         </div>
@@ -862,6 +865,10 @@ export function OrgDashboard() {
 
   // ── Service wiring (ORG-P01: never assume non-null; empty-safe arrays via useServiceArray) ──
   const svc = useOrgServices();
+  const { currentOrganization } = useAuth();
+  /** The org's own reporting currency. Tiles used to hardcode 'PKR', so a USD org saw its real
+   *  USD figures mislabelled as rupees. */
+  const orgCurrency = currentOrganization?.currency || 'PKR';
   const {
     data: bankAccounts,
     loading: accountsLoading,
@@ -882,9 +889,31 @@ export function OrgDashboard() {
     [svc.orgId],
   );
 
+  // Real sources for the "Upcoming (next 30 days)" panel and the department chart — these were
+  // hardcoded mock arrays, so the panel showed the same Jan dates/parties forever and never
+  // reflected the org's actual recurring schedule, loan due dates, or department performance.
+  const { data: recurringTxns, refetch: refetchRecurring } = useServiceArray(
+    () => svc.recurring.getAll(),
+    [svc.orgId],
+    ['recurringTransactions'],
+  );
+  const { data: loans, refetch: refetchLoans } = useServiceArray(
+    () => svc.loans.getAll(),
+    [svc.orgId],
+    ['loans'],
+  );
+  const { data: deptProfitability, refetch: refetchDepts } = useServiceArray(
+    () => svc.departments.getProfitability(),
+    [svc.orgId],
+    ['departments', 'transactions'],
+  );
+
   const refreshDashboardData = () => {
     void refetchAccounts();
     void refetchKpis();
+    void refetchRecurring();
+    void refetchLoans();
+    void refetchDepts();
   };
 
   const getProfitByPeriod = (): number => {
@@ -892,7 +921,7 @@ export function OrgDashboard() {
       case 'weekly':
         return safeFinite(analytics.weeklyProfit, analytics.monthlyProfit);
       case 'monthly':
-        return safeFinite(dashboardKPIs?.netProfit, analytics.monthlyProfit);
+        return safeFinite(dashboardKPIs?.monthlyProfit, analytics.monthlyProfit);
       case 'yearly':
         return safeFinite(analytics.yearlyProfit, analytics.monthlyProfit);
     }
@@ -934,30 +963,92 @@ export function OrgDashboard() {
       : profitPeriod === 'yearly'
         ? 'Yearly Profit'
         : 'Monthly Profit';
-  
-  // Mock department data for 3D chart
-  const departments = [
-    { name: 'Development', value: 4200000, color: 'purple' },
-    { name: 'Design', value: 2800000, color: 'cyan' },
-    { name: 'Marketing', value: 3500000, color: 'pink' },
-    { name: 'Sales', value: 4800000, color: 'green' },
-  ];
-  
-  const maxDeptValue = Math.max(...departments.map(d => d.value));
 
-  // Mock upcoming transactions
-  const upcomingPayments = [
-    { date: 'Jan 10', title: 'Client Payment - ABC Corp', amount: 850000, currency: 'PKR' },
-    { date: 'Jan 15', title: 'Project Milestone - XYZ Ltd', amount: 650000, currency: 'PKR' },
-    { date: 'Jan 20', title: 'Consulting Revenue', amount: 320000, currency: 'PKR' },
-  ];
-  
-  const upcomingExpenses = [
-    { date: 'Jan 12', title: 'Payroll Processing', amount: 1200000, currency: 'PKR' },
-    { date: 'Jan 18', title: 'Software Subscriptions', amount: 45000, currency: 'PKR' },
-    { date: 'Jan 25', title: 'Office Rent', amount: 180000, currency: 'PKR' },
-  ];
-  
+  // Only the "monthly" period has a real service-backed figure behind it (weekly/yearly are
+  // still fallback placeholders — see dashboardFallbackAnalytics), so only it gets a trend badge.
+  // Total Balance, Cash in Hand and Net Worth are point-in-time balances with no stored history
+  // to diff against, so they never get a fabricated badge either.
+  const profitChangeBadge =
+    profitPeriod === 'monthly' && dashboardKPIs?.profitChange != null
+      ? {
+          percentage: `${dashboardKPIs.profitChange >= 0 ? '+' : ''}${dashboardKPIs.profitChange.toFixed(1)}%`,
+          trend: (dashboardKPIs.profitChange >= 0 ? 'up' : 'down') as const,
+        }
+      : {};
+
+  // Department revenue for the chart — real profitability per department (top 4 by revenue).
+  const DEPT_CHART_COLORS = ['purple', 'cyan', 'pink', 'green'] as const;
+  const departments = useMemo(
+    () =>
+      [...deptProfitability]
+        .sort((a, b) => safeFinite(b.revenue, 0) - safeFinite(a.revenue, 0))
+        .slice(0, 4)
+        .map((d, i) => ({
+          name: d.departmentName,
+          value: safeFinite(d.revenue, 0),
+          color: DEPT_CHART_COLORS[i % DEPT_CHART_COLORS.length],
+        })),
+    [deptProfitability],
+  );
+
+  // `Math.max()` of an empty list is -Infinity, which would make every bar width NaN.
+  const maxDeptValue = departments.length > 0 ? Math.max(...departments.map(d => d.value)) : 0;
+
+  /** Everything genuinely scheduled in the next 30 days: active recurring transactions on their
+   *  next occurrence, plus outstanding loan instalments/settlements by due date. */
+  const { upcomingPayments, upcomingExpenses } = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 30);
+
+    const inWindow = (iso?: string) => {
+      if (!iso) return false;
+      const t = new Date(iso).getTime();
+      return !Number.isNaN(t) && t >= start.getTime() && t <= end.getTime();
+    };
+
+    type Row = { date: string; title: string; amount: number; currency: string; sort: number };
+    const credits: Row[] = [];
+    const debits: Row[] = [];
+
+    const push = (iso: string, title: string, amount: number, currency: string, isCredit: boolean) => {
+      const row: Row = {
+        date: formatDateShort(iso),
+        title,
+        amount: Math.abs(safeFinite(amount, 0)),
+        currency: currency || orgCurrency,
+        sort: new Date(iso).getTime(),
+      };
+      (isCredit ? credits : debits).push(row);
+    };
+
+    for (const r of recurringTxns) {
+      if (!r.isActive || !inWindow(r.nextOccurrence)) continue;
+      push(r.nextOccurrence, r.description, r.amount, r.currency, r.type === 'credit');
+    }
+
+    for (const l of loans) {
+      if (l.status === 'closed' || l.status === 'written_off') continue;
+      const due = l.nextPaymentDate && inWindow(l.nextPaymentDate) ? l.nextPaymentDate
+        : inWindow(l.dueDate) ? l.dueDate
+        : null;
+      if (!due) continue;
+      const amount = safeFinite(l.installmentAmount, 0) > 0
+        ? l.installmentAmount!
+        : safeFinite(l.remainingBalance ?? l.amount, 0);
+      if (amount <= 0) continue;
+      const label = l.party ? `${l.party} — ${l.description || 'Loan'}` : (l.description || 'Loan');
+      push(due, label, amount, l.currency, l.type === 'to_receive');
+    }
+
+    const bySoonest = (a: Row, b: Row) => a.sort - b.sort;
+    return {
+      upcomingPayments: credits.sort(bySoonest),
+      upcomingExpenses: debits.sort(bySoonest),
+    };
+  }, [recurringTxns, loans, orgCurrency]);
+
   const totalUpcomingPayments = upcomingPayments.reduce((sum, p) => sum + p.amount, 0);
   const totalUpcomingExpenses = upcomingExpenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -1090,39 +1181,32 @@ export function OrgDashboard() {
                 icon={TrendingUp}
                 label="Total Balance"
                 value={totalBalance}
-                currency="PKR"
-                percentage="12.5%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0.1}
               />
-              
+
               <ModernKPICard
                 icon={Wallet}
                 label="Cash in Hand"
                 value={cashOnHand}
-                currency="PKR"
-                percentage="8.2%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0.2}
               />
-              
+
               <ModernKPICard
                 icon={DollarSign}
                 label={profitLabel}
                 value={monthlyProfitDisplay}
-                currency="PKR"
-                percentage="15.7%"
-                trend="up"
+                currency={orgCurrency}
+                {...profitChangeBadge}
                 delay={0.3}
               />
-              
+
               <ModernKPICard
                 icon={BarChart3}
                 label="Net Worth"
                 value={netWorthDisplay}
-                currency="PKR"
-                percentage="12.5%"
-                trend="up"
+                currency={orgCurrency}
                 delay={0.4}
               />
             </div>
@@ -1344,6 +1428,7 @@ export function OrgDashboard() {
             >
               <UpcomingPanelContent
                 theme={theme}
+                currency={orgCurrency}
                 totalUpcomingPayments={totalUpcomingPayments}
                 totalUpcomingExpenses={totalUpcomingExpenses}
                 upcomingPayments={upcomingPayments}
@@ -1414,6 +1499,7 @@ export function OrgDashboard() {
           >
             <UpcomingPanelContent
               theme={theme}
+              currency={orgCurrency}
               totalUpcomingPayments={totalUpcomingPayments}
               totalUpcomingExpenses={totalUpcomingExpenses}
               upcomingPayments={upcomingPayments}

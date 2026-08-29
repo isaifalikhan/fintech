@@ -65,21 +65,89 @@ export const reportService = {
 
     await simulateDelay(200);
 
-    const txns = dataStore.transactions.filter(t => t.organizationId === organizationId);
+    const allTxns = dataStore.transactions.filter(t => t.organizationId === organizationId);
     const accounts = dataStore.accounts.filter(a => a.organizationId === organizationId);
+
+    // Revenue/expense/profit are simple sums of Transaction.amount — there is no FX-conversion
+    // capability anywhere in this app (QuickAdd's "PKR rate" field only decorates the narration
+    // string and tags; it's never stored as a structured, reusable rate). Summing every
+    // transaction regardless of its own `currency` and labelling the total with the org's default
+    // currency silently overstated/understated it whenever a transaction was recorded in a
+    // different currency (e.g. a PKR expense making a USD org's "Monthly Profit" read PKR-1000
+    // lower while being displayed as if it were USD 1000 lower). Restrict these three totals to
+    // transactions in the org's own currency, and report what was excluded so the UI can say so
+    // instead of quietly being wrong.
+    const org = dataStore.organizations.find(o => o.id === organizationId);
+    const revenueExpenseCurrency = org?.currency || 'PKR';
+    const txns = allTxns.filter(t => t.currency === revenueExpenseCurrency);
+    const otherCurrencyTransactionCount = allTxns.length - txns.length;
 
     const totalRevenue = txns.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
     const totalExpenses = txns.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
-    const cashAccounts = accounts.filter(a => a.subtype === 'bank_account' || a.subtype === 'current_asset');
-    const cashOnHand = cashAccounts.reduce((s, a) => s + a.balance, 0);
+    // "Monthly Profit" needs an actual current-month figure — `netProfit` above is a lifetime sum
+    // and was being displayed under that label, silently showing cumulative profit as if it were
+    // this month's. Trend badges compare the monthly figure to the prior calendar month using the
+    // same currency-scoped transactions; they're null (not 0%) when the prior month has nothing to
+    // compare against, since a "% change from zero" isn't a real number.
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const now = new Date();
+    const currentMonthKey = monthKey(now);
+    const previousMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const inMonth = (t: (typeof txns)[number], key: string) => monthKey(new Date(t.date)) === key;
 
+    const currentMonthTxns = txns.filter(t => inMonth(t, currentMonthKey));
+    const previousMonthTxns = txns.filter(t => inMonth(t, previousMonthKey));
+
+    const sumCredits = (rows: typeof txns) => rows.filter(t => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const sumDebits = (rows: typeof txns) => rows.filter(t => t.type === 'debit').reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    const monthlyRevenue = sumCredits(currentMonthTxns);
+    const monthlyExpenses = sumDebits(currentMonthTxns);
+    const monthlyProfit = monthlyRevenue - monthlyExpenses;
+
+    const prevMonthlyRevenue = sumCredits(previousMonthTxns);
+    const prevMonthlyExpenses = sumDebits(previousMonthTxns);
+    const prevMonthlyProfit = prevMonthlyRevenue - prevMonthlyExpenses;
+
+    const pctChange = (curr: number, prev: number): number | null =>
+      prev === 0 ? null : Math.round(((curr - prev) / Math.abs(prev)) * 1000) / 10;
+
+    const revenueChange = pctChange(monthlyRevenue, prevMonthlyRevenue);
+    const expenseChange = pctChange(monthlyExpenses, prevMonthlyExpenses);
+    const profitChange = pctChange(monthlyProfit, prevMonthlyProfit);
+
+    // Real cash lives on the bank accounts/wallets the user actually maintains — the chart-of-
+    // accounts mirror is not kept in step with them (its balances stay 0 unless journalled), which
+    // made "Cash in Hand" and "Net Worth" read 0 while the dashboard's own Total Balance tile
+    // showed the true figure. Prefer bank accounts; fall back to the chart only if none exist.
+    const bankAccounts = dataStore.bankAccounts.filter(
+      b => b.organizationId === organizationId && b.isActive,
+    );
+    const cashAccounts = accounts.filter(a => a.subtype === 'bank_account' || a.subtype === 'current_asset');
+    const cashOnHand = bankAccounts.length > 0
+      ? bankAccounts.reduce((s, b) => s + (Number(b.balance) || 0), 0)
+      : cashAccounts.reduce((s, a) => s + a.balance, 0);
+
+    // Receivables/payables: use the chart accounts when they exist, otherwise derive from the
+    // Loans & Liabilities module, which is where this app actually tracks money owed either way.
     const arAccount = accounts.find(a => a.name.toLowerCase().includes('receivable'));
     const apAccount = accounts.find(a => a.name.toLowerCase().includes('payable'));
+    const openLoans = dataStore.loans.filter(
+      l => l.organizationId === organizationId && l.status !== 'closed' && l.status !== 'written_off',
+    );
+    const outstanding = (direction: 'to_receive' | 'to_pay') =>
+      openLoans
+        .filter(l => l.type === direction)
+        .reduce((s, l) => s + Math.abs(Number(l.remainingBalance ?? l.amount) || 0), 0);
+    const accountsReceivable = arAccount ? arAccount.balance : outstanding('to_receive');
+    const accountsPayable = apAccount ? apAccount.balance : outstanding('to_pay');
 
-    const pendingTransactions = txns.filter(t => t.status === 'pending').length;
+    // Pending count is a review queue, not a money sum — keep it over every transaction
+    // regardless of currency, unlike the revenue/expense totals above.
+    const pendingTransactions = allTxns.filter(t => t.status === 'pending').length;
 
     return {
       success: true,
@@ -88,13 +156,18 @@ export const reportService = {
         totalExpenses,
         netProfit,
         profitMargin: Math.round(profitMargin * 10) / 10,
+        monthlyRevenue,
+        monthlyExpenses,
+        monthlyProfit,
         cashOnHand,
-        accountsReceivable: arAccount?.balance || 0,
-        accountsPayable: apAccount?.balance || 0,
+        accountsReceivable,
+        accountsPayable,
         pendingTransactions,
-        revenueChange: 12.7,
-        expenseChange: 8.3,
-        profitChange: 16.7,
+        revenueChange,
+        expenseChange,
+        profitChange,
+        revenueExpenseCurrency,
+        otherCurrencyTransactionCount,
       },
     };
   },
@@ -186,18 +259,9 @@ export const reportService = {
         };
       });
 
-    if (result.length < months) {
-      const supplemental: CashFlowSummary[] = [
-        { month: 'Jan', inflow: 125000, outflow: 89000, net: 36000 },
-        { month: 'Feb', inflow: 142000, outflow: 95000, net: 47000 },
-        { month: 'Mar', inflow: 138000, outflow: 92000, net: 46000 },
-        { month: 'Apr', inflow: 165000, outflow: 102000, net: 63000 },
-        { month: 'May', inflow: 158000, outflow: 98000, net: 60000 },
-        { month: 'Jun', inflow: 178000, outflow: 108000, net: 70000 },
-      ];
-      return { success: true, data: supplemental.slice(0, months) };
-    }
-
+    // Return only the months the org actually has data for. This used to substitute a block of
+    // invented figures (Jan–Jun, inflow 125000, …) whenever history was shorter than `months`,
+    // which put fabricated revenue on the dashboard chart and cash-flow reports.
     return { success: true, data: result };
   },
 

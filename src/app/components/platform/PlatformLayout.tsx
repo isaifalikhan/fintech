@@ -1,10 +1,10 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { AXIOM } from '../../../styles/axiom-tokens';
-import { 
-  Building2, LayoutDashboard, CreditCard, Settings, LogOut, User, 
-  Cpu, Radio, Brain, ChevronRight, Shield, Activity
+import {
+  Building2, LayoutDashboard, CreditCard, Settings, LogOut, User,
+  Cpu, Radio, Brain, ChevronRight, Shield, Activity, Menu, X,
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 
@@ -16,11 +16,18 @@ interface PlatformLayoutProps {
 
 export function PlatformLayout({ children, currentView, onViewChange }: PlatformLayoutProps) {
   const { user, logout } = useAuth();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const closeMobileNav = () => setMobileNavOpen(false);
+  const selectView = (view: string) => {
+    onViewChange(view);
+    closeMobileNav();
+  };
 
   const navItems = [
     { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'organizations', label: 'Organizations', icon: Building2 },
     { id: 'plans', label: 'Plans & Billing', icon: CreditCard },
+    { id: 'ai', label: 'AI Portal', icon: Brain },
     { id: 'settings', label: 'Platform Settings', icon: Settings },
   ];
 
@@ -41,43 +48,51 @@ export function PlatformLayout({ children, currentView, onViewChange }: Platform
       }} />
 
       {/* Top Header Bar */}
-      <div className="h-20 backdrop-blur-xl flex items-center justify-between px-8 shrink-0 relative z-20" style={{
+      <div className="min-h-16 sm:min-h-20 backdrop-blur-xl flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-[60]" style={{
         background: AXIOM.backgrounds.topBar,
         borderBottom: '1px solid rgba(168, 85, 247, 0.2)',
       }}>
         {/* Glowing Top Border */}
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
 
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="size-12 rounded-xl bg-gradient-to-br from-purple-500 via-purple-600 to-pink-600 flex items-center justify-center relative">
-              <Shield className="size-6 text-white" />
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <button
+            type="button"
+            aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMobileNavOpen(o => !o)}
+            className="lg:hidden shrink-0 p-2.5 rounded-xl border border-purple-500/30 bg-slate-950/50 text-purple-300"
+          >
+            {mobileNavOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
+          <div className="relative shrink-0">
+            <div className="size-10 sm:size-12 rounded-xl bg-gradient-to-br from-purple-500 via-purple-600 to-pink-600 flex items-center justify-center relative">
+              <Shield className="size-5 sm:size-6 text-white" />
               <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 blur-lg opacity-50" />
             </div>
           </div>
 
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 bg-clip-text text-transparent">
+          <div className="min-w-0 hidden min-[400px]:block">
+            <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 bg-clip-text text-transparent truncate">
               Finance OS - Platform Console
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
               <div className="size-2 rounded-full bg-purple-400 shadow-lg shadow-purple-400/50" />
               <p className="text-xs text-purple-400/70 font-mono">Super Admin Dashboard</p>
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 px-4 py-2 backdrop-blur-xl rounded-xl" style={{
+
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+          <div className="hidden sm:flex items-center gap-2 md:gap-3 px-2 md:px-4 py-2 max-w-[200px] md:max-w-xs backdrop-blur-xl rounded-xl min-w-0" style={{
             background: 'rgba(0, 0, 0, 0.3)',
             border: '1px solid rgba(168, 85, 247, 0.2)',
           }}>
-            <User className="size-4 text-purple-400" />
-            <div>
-              <p className="text-sm text-white font-medium">{user?.name}</p>
+            <User className="size-4 text-purple-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm text-white font-medium truncate">{user?.name}</p>
               <div className="flex items-center gap-2">
-                <p className="text-xs text-purple-400/70 font-mono">{user?.email}</p>
-                <span className="text-xs px-1.5 py-0.5 rounded text-purple-300 font-mono" style={{
+                <p className="text-xs text-purple-400/70 font-mono truncate">{user?.email}</p>
+                <span className="text-xs px-1.5 py-0.5 rounded text-purple-300 font-mono shrink-0" style={{
                   background: 'rgba(168, 85, 247, 0.15)',
                   border: '1px solid rgba(168, 85, 247, 0.3)',
                 }}>
@@ -88,18 +103,33 @@ export function PlatformLayout({ children, currentView, onViewChange }: Platform
           </div>
           <Button
             onClick={logout}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium px-6"
+            title="Log out"
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium px-3 sm:px-6"
           >
-            <LogOut className="size-4 mr-2" />
-            Logout
+            <LogOut className="size-4 sm:mr-2" />
+            <span className="hidden sm:inline">Logout</span>
           </Button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative min-h-0">
+        {/* Mobile overlay */}
+        {mobileNavOpen && (
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={closeMobileNav}
+          />
+        )}
+
         {/* Sidebar */}
-        <div className="w-72 backdrop-blur-xl flex flex-col shrink-0 relative" style={{
+        <div className={cn(
+          "w-72 backdrop-blur-xl flex flex-col shrink-0 relative",
+          "fixed z-50 top-[4.75rem] sm:top-20 bottom-0 left-0 lg:static lg:z-0 lg:top-auto lg:bottom-auto transition-transform duration-200 ease-out",
+          mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+        )} style={{
           background: 'rgba(15, 23, 42, 0.5)',
           borderRight: '1px solid rgba(168, 85, 247, 0.15)',
         }}>
@@ -127,7 +157,7 @@ export function PlatformLayout({ children, currentView, onViewChange }: Platform
             {navItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => onViewChange(item.id)}
+                onClick={() => selectView(item.id)}
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-all duration-200 cursor-pointer',
                   currentView === item.id

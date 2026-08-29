@@ -257,6 +257,21 @@ export function EnhancedStatementImport({
       // Process CSV data
       const transactions = processCSVData(csvData, columnMapping, csvHeaders);
 
+      // Never advance to Review with nothing to review — that used to show a dead
+      // "Total 0 / To Import 0" screen plus a "Parsed 0 rows" *success* toast, leaving the
+      // user stuck with no idea what went wrong. Explain the likely cause instead.
+      if (transactions.length === 0) {
+        const dataRowCount = Math.max(0, csvData.length - 1);
+        toast.error(
+          dataRowCount === 0
+            ? 'That file has no data rows below the header.'
+            : `None of the ${dataRowCount} row(s) could be read. Check the Column Mapping step — the date, description and amount columns must point at real columns.`,
+          { duration: 8000 },
+        );
+        setCurrentStep('mapping');
+        return;
+      }
+
       // Detect duplicates (ledger rows may omit fields — handled in importUtils)
       findDuplicates(transactions, existingTransactions);
 
@@ -582,7 +597,14 @@ export function EnhancedStatementImport({
       </motion.div>
 
       {/* Step Content */}
-      <AnimatePresence mode="wait">
+      {/* mode="wait" previously serialized step transitions behind the OLD step's exit
+          animation finishing. If that animation never completes (throttled/hidden tab,
+          reduced-motion settings, a GPU hiccup) the wizard looked permanently stuck on
+          "Processing file..." even though parsing had already succeeded and state had
+          already advanced — the next step's content just never mounted. Default (sync)
+          mode mounts the new step immediately; old and new steps cross-fade instead of
+          strictly sequencing. */}
+      <AnimatePresence>
         {currentStep === 'upload' && (
           <motion.div
             key="upload"
@@ -1376,6 +1398,17 @@ export function EnhancedStatementImport({
                 ))}
               </div>
             </div>
+
+            {filteredTransactions.length === 0 && stats.total > 0 && stats.duplicates === stats.total && (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={AXIOM.containers.list}>
+                <AlertTriangle className="size-5 text-amber-400 shrink-0" />
+                <p className="text-sm text-amber-400/90">
+                  All {stats.total} {stats.total === 1 ? 'row' : 'rows'} in this file already{' '}
+                  {stats.total === 1 ? 'exists' : 'exist'} in your transactions — nothing new to
+                  import.
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-between">
               <motion.button

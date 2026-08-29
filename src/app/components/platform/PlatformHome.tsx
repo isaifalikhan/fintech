@@ -42,7 +42,7 @@ function KPICard({ title, value, subtitle, icon: Icon, color, delay }: {
   );
 }
 
-export function PlatformHome() {
+export function PlatformHome({ onNavigateToOrganizations }: { onNavigateToOrganizations?: () => void } = {}) {
   const { data: stats, loading } = useService(
     () => platformService.getStats(),
     []
@@ -72,7 +72,7 @@ export function PlatformHome() {
         <KPICard title="MONTHLY RECURRING REVENUE" value={`Rs ${stats.mrr.toLocaleString()}`} subtitle="+12% from last month" icon={DollarSign} color="green" delay={0.1} />
         <KPICard title="ANNUAL RECURRING REVENUE" value={`Rs ${stats.arr.toLocaleString()}`} subtitle="On track for target" icon={TrendingUp} color="blue" delay={0.15} />
         <KPICard title="ACTIVE ORGANIZATIONS" value={`${stats.activeOrgs}`} subtitle={`${stats.trialOrgs} trials, ${stats.churnRiskOrgs} at risk`} icon={Building2} color="cyan" delay={0.2} />
-        <KPICard title="TOTAL USERS" value={`${stats.totalUsers}`} subtitle="+18 this month" icon={Users} color="purple" delay={0.25} />
+        <KPICard title="TOTAL USERS" value={`${stats.totalUsers}`} subtitle={`+${stats.newUsersThisMonth} this month`} icon={Users} color="purple" delay={0.25} />
       </div>
 
       {/* Charts Row */}
@@ -211,15 +211,28 @@ export function PlatformHome() {
           <h3 className="text-white font-bold">Attention Required</h3>
         </div>
         <div className="space-y-3">
-          {[
-            { title: '5 organizations at churn risk', sub: 'Review billing status and engagement' },
-            { title: '3 organizations with overdue payments', sub: 'Send payment reminders' },
-          ].map((alert, i) => (
+          {/* Derived from the same `stats` the KPI cards above use — these were hardcoded
+              ("5 organizations at churn risk"), so they contradicted the real counts. */}
+          {([
+            stats.churnRiskOrgs > 0 && {
+              title: `${stats.churnRiskOrgs} organization${stats.churnRiskOrgs === 1 ? '' : 's'} at churn risk`,
+              sub: 'Review billing status and engagement',
+            },
+            stats.suspendedOrgs > 0 && {
+              title: `${stats.suspendedOrgs} organization${stats.suspendedOrgs === 1 ? '' : 's'} suspended`,
+              sub: 'Resolve account status',
+            },
+            stats.trialOrgs > 0 && {
+              title: `${stats.trialOrgs} organization${stats.trialOrgs === 1 ? '' : 's'} on trial`,
+              sub: 'Follow up before the trial ends',
+            },
+          ].filter(Boolean) as { title: string; sub: string }[]).map((alert, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.55 + i * 0.05 }}
+              onClick={onNavigateToOrganizations}
               className="flex items-center justify-between p-4 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
               style={{
                 background: AXIOM.backgrounds.innerCard,

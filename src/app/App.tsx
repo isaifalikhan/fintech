@@ -9,7 +9,7 @@ import { LandingPage } from './components/LandingPage';
 import { AdminLoginPage } from './components/AdminLoginPage';
 import { PlatformLoginPage } from './components/PlatformLoginPage';
 import { EmployeeLoginPage } from './components/EmployeeLoginPage';
-import { BingLoginPage } from './components/BingLoginPage';
+import { BingLoginPage, mapToAiDestination } from './components/BingLoginPage';
 import { LoginPage } from './components/LoginPage';
 
 // Lazy load heavy workspace components
@@ -178,6 +178,16 @@ function SmartRedirect() {
   return <Navigate to={getRedirectPath()} replace />;
 }
 
+/** Same as `SmartRedirect`, but maps to the role's AI tab instead of the generic dashboard —
+ *  used only for `/login/bing` so a login that lands here (already authenticated, or just
+ *  finished logging in) goes straight to the AI destination rather than racing a plain
+ *  `SmartRedirect` that would otherwise win and discard the AI-specific intent. */
+function AiSmartRedirect() {
+  const { user, getRedirectPath } = useAuth();
+  if (!user) return <Navigate to="/" replace />;
+  return <Navigate to={mapToAiDestination(getRedirectPath())} replace />;
+}
+
 // App Routes Component
 function AppRoutes() {
   const { user, login } = useAuth();
@@ -192,7 +202,7 @@ function AppRoutes() {
       <Route path="/login/platform" element={!user ? <PlatformLoginPage onLogin={login} /> : <SmartRedirect />} />
       <Route path="/login/employee/:orgSlug" element={!user ? <EmployeeLoginPage onLogin={login} /> : <SmartRedirect />} />
       <Route path="/login/employee" element={!user ? <EmployeeLoginPage onLogin={login} /> : <SmartRedirect />} />
-      <Route path="/login/bing" element={!user ? <BingLoginPage onLogin={login} /> : <SmartRedirect />} />
+      <Route path="/login/bing" element={!user ? <BingLoginPage onLogin={login} /> : <AiSmartRedirect />} />
       <Route path="/login" element={!user ? <LoginPage onLogin={login} /> : <SmartRedirect />} />
       
       {/* ============================== */}
