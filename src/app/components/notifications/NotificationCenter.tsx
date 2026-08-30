@@ -32,8 +32,7 @@ const TYPE_STYLES = {
   info: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
   success: 'bg-green-500/10 border-green-500/20 text-green-400',
   warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
-  error: 'bg-red-500/10 border-red-500/20 text-red-400',
-  insight: 'bg-purple-500/10 border-purple-500/20 text-purple-400'
+  error: 'bg-red-500/10 border-red-500/20 text-red-400'
 };
 
 export function NotificationCenter() {
@@ -41,6 +40,7 @@ export function NotificationCenter() {
   const {
     notifications,
     unreadCount,
+    loading,
     markAsRead,
     markAllAsRead,
     removeNotification,
@@ -129,7 +129,11 @@ export function NotificationCenter() {
 
               {/* Notifications List */}
               <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                {notifications.length === 0 ? (
+                {loading ? (
+                  <div className="px-4 py-12 text-center">
+                    <p className="text-slate-400 text-sm">Loading notifications…</p>
+                  </div>
+                ) : notifications.length === 0 ? (
                   <div className="px-4 py-12 text-center">
                     <Bell className="w-12 h-12 text-slate-700 mx-auto mb-3" />
                     <p className="text-slate-400">No notifications</p>
@@ -168,7 +172,7 @@ function NotificationItem({
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const Icon = CATEGORY_ICONS[notification.category];
+  const Icon = (notification.category && CATEGORY_ICONS[notification.category]) || Bell;
   const typeStyle = TYPE_STYLES[notification.type];
   const navigate = useNavigate();
 
@@ -178,7 +182,7 @@ function NotificationItem({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0 }}
       className={`px-4 py-3 hover:bg-white/5 transition-colors ${
-        !notification.read ? 'bg-blue-500/5' : ''
+        !notification.isRead ? 'bg-blue-500/5' : ''
       }`}
     >
       <div className="flex gap-3">
@@ -191,7 +195,7 @@ function NotificationItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
             <h4 className="text-sm font-medium text-white">{notification.title}</h4>
-            {!notification.read && (
+            {!notification.isRead && (
               <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1" />
             )}
           </div>
@@ -200,7 +204,7 @@ function NotificationItem({
           </p>
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
+              {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
             </span>
             {notification.actionLabel && (
               <button
@@ -220,7 +224,7 @@ function NotificationItem({
 
         {/* Actions */}
         <div className="flex flex-col gap-1 flex-shrink-0">
-          {!notification.read && (
+          {!notification.isRead && (
             <button
               onClick={onRead}
               className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"

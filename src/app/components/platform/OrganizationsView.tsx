@@ -27,6 +27,7 @@ export function OrganizationsView() {
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgAdminEmail, setNewOrgAdminEmail] = useState('');
   const [newOrgPlan, setNewOrgPlan] = useState('Basic (Trial)');
+  const [newOrgCurrency, setNewOrgCurrency] = useState('USD');
   const [creatingOrg, setCreatingOrg] = useState(false);
 
   // Fetch all orgs from the service layer (platform admin sees all)
@@ -48,7 +49,7 @@ export function OrganizationsView() {
     setCreatingOrg(true);
     const res = await organizationService.create({
       name,
-      currency: 'PKR',
+      currency: newOrgCurrency,
       fiscalYearStart: '01-01',
       settings: { theme: 'dark', notifications: true },
     });
@@ -62,6 +63,7 @@ export function OrganizationsView() {
     setNewOrgName('');
     setNewOrgAdminEmail('');
     setNewOrgPlan('Basic (Trial)');
+    setNewOrgCurrency('USD');
     await refetchOrgs();
   };
 
@@ -197,7 +199,7 @@ export function OrganizationsView() {
             <Plus className="size-5 text-purple-400" />
             New Organization
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-1">
               <label className="text-xs text-slate-400 font-mono">Organization Name</label>
               <input
@@ -231,6 +233,22 @@ export function OrganizationsView() {
                 <option>Basic (Trial)</option>
                 <option>Professional</option>
                 <option>Enterprise</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Currency</label>
+              <select
+                value={newOrgCurrency}
+                onChange={(e) => setNewOrgCurrency(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              >
+                <option value="USD">USD</option>
+                <option value="PKR">PKR</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AED">AED</option>
+                <option value="SAR">SAR</option>
               </select>
             </div>
           </div>

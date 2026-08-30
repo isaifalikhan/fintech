@@ -350,6 +350,8 @@ export interface Notification {
   createdAt: string;
   actionUrl?: string;
   actionLabel?: string;
+  /** Optional grouping used to pick an icon in the notification center. */
+  category?: 'cashflow' | 'categorization' | 'insight' | 'reminder' | 'system';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
