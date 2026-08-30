@@ -75,6 +75,69 @@ function mergePlatformPlan(current: PlatformPlan, updates: Partial<PlatformPlan>
 }
 
 /**
+ * Validates + normalizes a PATCH /plans/:id body field-by-field (only the fields present),
+ * mirroring POST /plans' validation exactly. `req.body` is untyped at runtime — without this,
+ * e.g. `{ name: null }` reached `updates.name.trim()` directly and crashed with a 500 instead of
+ * a clean 400, and `{ features: "oops" }` or `{ active: "false" }` persisted straight through and
+ * broke PlansView's Edit dialog / inverted the "Active" toggle on next read.
+ */
+function sanitizePlanUpdates(
+  body: Partial<PlatformPlan>,
+): { ok: true; updates: Partial<PlatformPlan> } | { ok: false; error: string } {
+  const updates: Partial<PlatformPlan> = {};
+
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || !body.name.trim()) {
+      return { ok: false, error: 'Plan name cannot be empty' };
+    }
+    updates.name = body.name.trim();
+  }
+  if (body.price !== undefined) {
+    if (typeof body.price !== 'number' || Number.isNaN(body.price) || body.price < 0) {
+      return { ok: false, error: 'Price must be a non-negative number' };
+    }
+    updates.price = body.price;
+  }
+  if (body.currency !== undefined) {
+    if (typeof body.currency !== 'string' || !body.currency.trim()) {
+      return { ok: false, error: 'Currency must be a non-empty string' };
+    }
+    updates.currency = body.currency.trim().toUpperCase();
+  }
+  if (body.features !== undefined) {
+    if (!Array.isArray(body.features) || !body.features.every((f) => typeof f === 'string')) {
+      return { ok: false, error: 'Features must be an array of strings' };
+    }
+    updates.features = body.features;
+  }
+  if (body.limits !== undefined) {
+    const l = body.limits as Partial<PlatformPlan['limits']> | null;
+    if (!l || typeof l !== 'object') {
+      return { ok: false, error: 'Limits must be an object' };
+    }
+    const keys: (keyof PlatformPlan['limits'])[] = ['users', 'statements', 'currencies', 'storage'];
+    const limits: Partial<PlatformPlan['limits']> = {};
+    for (const key of keys) {
+      const v = l[key];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || Number.isNaN(v) || v < 0) {
+        return { ok: false, error: `limits.${key} must be a non-negative number` };
+      }
+      limits[key] = v;
+    }
+    updates.limits = limits as PlatformPlan['limits'];
+  }
+  if (body.active !== undefined) {
+    if (typeof body.active !== 'boolean') {
+      return { ok: false, error: 'active must be a boolean' };
+    }
+    updates.active = body.active;
+  }
+
+  return { ok: true, updates };
+}
+
+/**
  * In-memory backup-history log — session-only (grows as backups are triggered), NOT part of
  * `ServerStore`/SQLite persistence. Mirrors `server/routes/audit.ts`'s `auditLogs` array exactly.
  */
@@ -161,14 +224,9 @@ export function createPlatformRouter(): Router {
   r.patch('/plans/:id', (req: Request, res: Response) => {
     const idx = store.platformPlans.findIndex(p => p.id === req.params.id);
     if (idx === -1) return notFound(res, 'Plan');
-    const updates = req.body as Partial<PlatformPlan>;
-    if (updates.name !== undefined && !updates.name.trim()) {
-      return fail(res, 400, 'Plan name cannot be empty');
-    }
-    if (updates.price !== undefined && (typeof updates.price !== 'number' || Number.isNaN(updates.price) || updates.price < 0)) {
-      return fail(res, 400, 'Price must be a non-negative number');
-    }
-    const merged = mergePlatformPlan(store.platformPlans[idx], updates);
+    const check = sanitizePlanUpdates(req.body as Partial<PlatformPlan>);
+    if (!check.ok) return fail(res, 400, check.error);
+    const merged = mergePlatformPlan(store.platformPlans[idx], check.updates);
     store.platformPlans[idx] = merged;
     store.persist();
     ok(res, merged, 'Plan updated');

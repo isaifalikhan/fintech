@@ -285,6 +285,7 @@ function ConnectBankStep() {
 
 function ImportStatementsStep({ onParsed }: { onParsed: (rows: ImportedTransaction[]) => void }) {
   const { completeStep, nextStep } = useOnboarding();
+  const { currentOrganization } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
 
@@ -316,9 +317,12 @@ function ImportStatementsStep({ onParsed }: { onParsed: (rows: ImportedTransacti
         return;
       }
 
-      // Real classification against the org's categories + their learned patterns.
-      const categories = dataStore.categories;
-      const previous = dataStore.transactions;
+      // Real classification against the org's own categories + their learned patterns —
+      // dataStore is a flat, multi-tenant store, so this must be scoped to the current org
+      // or a new user's onboarding could get suggestions built from other tenants' data.
+      const orgId = currentOrganization?.id;
+      const categories = dataStore.categories.filter(c => c.organizationId === orgId);
+      const previous = dataStore.transactions.filter(t => t.organizationId === orgId);
       const classified = rows.map(r => {
         const result = classifyTransaction(r.narration, r.amount, r.type, categories, previous, []);
         return {

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useServiceArray } from '@/hooks/useService';
 import type { Notification } from '@/services/types';
@@ -42,7 +43,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const markAsRead = useCallback(
     async (id: string) => {
-      await svc.notifications.markAsRead(id);
+      const res = await svc.notifications.markAsRead(id);
+      if (!res.success) {
+        toast.error(res.error || 'Could not mark notification as read.');
+        return;
+      }
       await refetch();
     },
     [svc, refetch],
@@ -50,20 +55,31 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const markAllAsRead = useCallback(async () => {
     if (!svc.isReady) return;
-    await svc.notifications.markAllAsRead();
+    const res = await svc.notifications.markAllAsRead();
+    if (!res.success) {
+      toast.error(res.error || 'Could not mark all notifications as read.');
+      return;
+    }
     await refetch();
   }, [svc, refetch]);
 
   const removeNotification = useCallback(
     async (id: string) => {
-      await svc.notifications.delete(id);
+      const res = await svc.notifications.delete(id);
+      if (!res.success) {
+        toast.error(res.error || 'Could not remove notification.');
+        return;
+      }
       await refetch();
     },
     [svc, refetch],
   );
 
   const clearAll = useCallback(async () => {
-    await Promise.all(notifications.map(n => svc.notifications.delete(n.id)));
+    const results = await Promise.all(notifications.map(n => svc.notifications.delete(n.id)));
+    if (results.some(r => !r.success)) {
+      toast.error('Some notifications could not be cleared.');
+    }
     await refetch();
   }, [svc, notifications, refetch]);
 

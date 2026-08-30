@@ -976,6 +976,13 @@ export function OrgDashboard() {
         }
       : {};
 
+  // Only meaningful for the "monthly" period — that's the only one backed by the real,
+  // currency-scoped dashboardKPIs figure (see reportService.getDashboardSummary).
+  const profitNote =
+    profitPeriod === 'monthly' && dashboardKPIs && dashboardKPIs.otherCurrencyTransactionCount > 0
+      ? `Excludes ${dashboardKPIs.otherCurrencyTransactionCount} transaction${dashboardKPIs.otherCurrencyTransactionCount === 1 ? '' : 's'} in other currencies — no FX conversion yet`
+      : undefined;
+
   // Department revenue for the chart — real profitability per department (top 4 by revenue).
   const DEPT_CHART_COLORS = ['purple', 'cyan', 'pink', 'green'] as const;
   const departments = useMemo(
@@ -1199,6 +1206,7 @@ export function OrgDashboard() {
                 value={monthlyProfitDisplay}
                 currency={orgCurrency}
                 {...profitChangeBadge}
+                note={profitNote}
                 delay={0.3}
               />
 

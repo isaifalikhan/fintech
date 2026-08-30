@@ -25,7 +25,7 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
   const orgId = orgIdProp ?? currentOrganization?.id ?? '';
   const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
-  const { data: members } = useServiceArray(
+  const { data: members, loading: membersLoading } = useServiceArray(
     () => employeeService.getTeamDirectory(orgId),
     [orgId],
     ['teamMembers'],
@@ -168,7 +168,7 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
-              {!members.length && (
+              {!membersLoading && !members.length && (
                 <p className="mt-1.5 text-xs text-amber-200/90">No employees found for this organization.</p>
               )}
             </label>

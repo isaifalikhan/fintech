@@ -209,6 +209,56 @@ are removed; the empty-state `quickPrompts` chips (prop-driven, unaffected by th
 | Caller over the per-user rate limit | Panel shows a "too many requests, try again shortly" error. |
 | Groq responds successfully | Reply renders as a normal assistant bubble; no suggestion chips. |
 
+## Amendment 3 — reconciled with the already-committed BYOK implementation (2026-08-30)
+
+Before this plan's execution began, a separate commit (`83d16b9 "ix"`, made directly on `main`,
+outside this design process) had already implemented a *different* real-AI path: per-org
+"bring your own key" chat via the existing `OrgAiIntegrationSettings` settings UI, routed to
+Anthropic or OpenAI through a new `server/lib/aiProviders.ts` and a `POST
+/organizations/:organizationId/ai-chat` route, with the client (`AIFinancialAssistant.tsx`'s
+`getChatReply`) falling back to the old canned demo replies whenever no key is configured.
+
+Decision: **merge, don't override.** The org's own BYOK key (already built, functioning) takes
+priority when configured; **Groq becomes the zero-config fallback** for orgs that haven't set one,
+using the server-side `GROQ_API_KEY` from the rest of this spec. The **silent fallback to fake
+canned replies is removed** either way — that always violated this repo's "never pad with fake
+data" rule and was never part of the approved design; an org with neither its own key nor a
+server Groq key now sees the same honest "not configured" message this spec always called for.
+
+This reconciliation **extends, not replaces**, the already-committed pieces rather than duplicating
+them:
+
+- `server/lib/aiProviders.ts` gains a `callGroq()` alongside the existing `callConfiguredAiProvider()`
+  (Anthropic/OpenAI) — implemented by generalizing the existing `callOpenAiCompatible()` helper to
+  take a base URL and default model, since Groq's endpoint is already OpenAI-request-shaped. No
+  competing "second AI client" file.
+- The existing `POST /organizations/:organizationId/ai-chat` route (in `server/routes/organizations.ts`)
+  is extended in place, not replaced by a new route — it gains the real data-grounding context
+  (org/employee summaries + the Finance OS product guide, per the "Conversational scope" and
+  "Context building" decisions above, previously missing entirely from the BYOK path's generic
+  hardcoded system prompt), a `surface: 'org' | 'employee'` field so it can serve both portals (the
+  BYOK path only ever served the org workspace), and the BYOK-then-Groq-then-honest-error resolution
+  order.
+- `AiChatTurn` (the `{role, content}` message shape) — previously defined twice, identically, in
+  both `server/lib/aiProviders.ts` and `src/services/aiSettingsService.ts` — moves to
+  `src/services/types.ts` as the single shared definition.
+- Conversation history was previously **not actually threaded** on either path — `getChatReply`
+  always called with `history: []`, making every reply amnesiac even within one open conversation.
+  This is fixed as part of the merge: `AiChatPanel`'s `getReply` gains a `history` parameter fed by
+  the panel's own message state, matching the "session-only history" decision above (the history
+  lives in React state and resets on reload — no new persistence).
+- The chat-sending function moves out of `aiSettingsService.ts` (whose own header comment scopes it
+  to settings CRUD) into a new `src/services/aiAssistantService.ts`, matching the original plan's
+  file boundary — `sendOrgAiChatMessage` is removed in favor of `sendAiChatMessage(orgId, message,
+  history, surface)` there.
+- Unrelated fixes in that same commit (mounting `<Toaster/>` so `toast.success/.error` render
+  app-wide; a mailto fallback toast in Employee Help) are kept as-is — out of scope for this spec,
+  not touched by this feature's tasks.
+
+Everything else in this spec (provider choice for the fallback tier, scope, floating-widget
+removal, fake-dashboard removal, rate limiting, non-streaming delivery, testing approach) stands
+unchanged.
+
 ## Testing / verification
 
 No test suite in this repo (per `CLAUDE.md` §6) — verify in-browser:

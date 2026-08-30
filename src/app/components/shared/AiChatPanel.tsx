@@ -89,16 +89,6 @@ export function AiChatPanel({
     setSending(true);
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        window.setTimeout(() => {
-          if (raw.toLowerCase() === 'error demo') {
-            reject(new Error('Assistant is unavailable right now. Try again in a moment.'));
-            return;
-          }
-          resolve();
-        }, 700);
-      });
-
       const { response, suggestions } = await getReply(raw);
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,

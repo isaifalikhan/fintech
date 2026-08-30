@@ -154,7 +154,7 @@ export function AIFinancialAssistant() {
   };
 
   // ── Task 2: real, computed insights (Ask tab's KPI/insights below stay demo — out of scope) ──
-  const { data: txnResult } = useService(
+  const { data: txnResult, loading: txnLoading } = useService(
     () => svc.transactions.getAll({ pageSize: 500 }),
     [svc.orgId],
     ['transactions'],
@@ -164,7 +164,7 @@ export function AIFinancialAssistant() {
     [txnResult],
   );
 
-  const { data: loans } = useServiceArray(
+  const { data: loans, loading: loansLoading } = useServiceArray(
     () => svc.loans.getAll(),
     [svc.orgId],
     ['loans'],
@@ -174,7 +174,7 @@ export function AIFinancialAssistant() {
     [loans],
   );
 
-  const { data: budgets } = useServiceArray(
+  const { data: budgets, loading: budgetsLoading } = useServiceArray(
     () => svc.budgets.getAll(),
     [svc.orgId],
     ['budgets'],
@@ -184,11 +184,12 @@ export function AIFinancialAssistant() {
     [budgets],
   );
 
-  const { data: memberRows } = useServiceArray(
+  const { data: memberRows, loading: memberRowsLoading } = useServiceArray(
     () => organizationService.getMembers(orgId),
     [orgId],
     ['organizationMembers'],
   );
+  const insightsLoading = txnLoading || loansLoading || budgetsLoading || memberRowsLoading;
   const pendingInvitesCount = useMemo(
     () => memberRows.filter((m) => m.status === 'pending').length,
     [memberRows],
@@ -982,7 +983,14 @@ export function AIFinancialAssistant() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          {insightCards.length === 0 ? (
+          {insightsLoading && insightCards.length === 0 ? (
+            <div
+              className="p-10 rounded-2xl text-center text-slate-400 text-sm"
+              style={AXIOM.containers.list}
+            >
+              Checking your transactions, loans, budgets and invites…
+            </div>
+          ) : insightCards.length === 0 ? (
             <div
               className="p-10 rounded-2xl text-center text-slate-400 text-sm"
               style={AXIOM.containers.list}

@@ -11,8 +11,9 @@
     {
       "name": "fintech-dev-verify",
       "runtimeExecutable": "C:\\Users\\Fame\\AppData\\Local\\pnpm\\pnpm.CMD",
-      "runtimeArgs": ["exec", "vite", "--port", "5183", "--strictPort"],
-      "port": 5183
+      "runtimeArgs": ["exec", "vite"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

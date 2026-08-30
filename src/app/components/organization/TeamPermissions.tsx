@@ -200,7 +200,7 @@ function memberRoleToUserRole(memberRole: MemberRole, previousOrgRole: UserRole)
 }
 
 export function TeamPermissions() {
-  const { user, currentOrganization, switchOrganization } = useAuth();
+  const { user, currentOrganization, switchOrganization, applyOrganizationUpdate } = useAuth();
   const orgId = currentOrganization?.id || 'org-001';
   const goToOrgView = useOrgWorkspaceNav();
 
@@ -289,6 +289,10 @@ export function TeamPermissions() {
     setRolePermissions(next);
     const res = await rolePermissionsMutation.execute({ rolePermissions: next });
     if (res.success) {
+      // Without this, AuthContext's cached `currentOrganization` keeps the pre-edit
+      // rolePermissions, and the effect below re-syncs local state from it on the next org
+      // switch/remount — silently reverting a permission toggle that actually saved.
+      if (res.data) applyOrganizationUpdate(res.data);
       toast.success('Permissions updated');
     } else {
       setRolePermissions(previous);

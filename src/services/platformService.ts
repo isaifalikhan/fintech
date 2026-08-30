@@ -215,6 +215,68 @@ function mergePlatformPlan(current: PlatformPlan, updates: Partial<PlatformPlan>
   };
 }
 
+/**
+ * Validates + normalizes an `updatePlan` payload field-by-field (only the fields present).
+ * Mirrors `sanitizePlanUpdates` in `server/routes/platform.ts` — the only current caller
+ * (PlansView) already sends well-typed data, but this keeps the dataStore branch from silently
+ * accepting a malformed shape (e.g. a non-array `features`) the way the HTTP branch would reject.
+ */
+function sanitizePlanUpdates(
+  updates: Partial<PlatformPlan>,
+): { ok: true; updates: Partial<PlatformPlan> } | { ok: false; error: string } {
+  const clean: Partial<PlatformPlan> = {};
+
+  if (updates.name !== undefined) {
+    if (typeof updates.name !== 'string' || !updates.name.trim()) {
+      return { ok: false, error: 'Plan name cannot be empty' };
+    }
+    clean.name = updates.name.trim();
+  }
+  if (updates.price !== undefined) {
+    if (typeof updates.price !== 'number' || Number.isNaN(updates.price) || updates.price < 0) {
+      return { ok: false, error: 'Price must be a non-negative number' };
+    }
+    clean.price = updates.price;
+  }
+  if (updates.currency !== undefined) {
+    if (typeof updates.currency !== 'string' || !updates.currency.trim()) {
+      return { ok: false, error: 'Currency must be a non-empty string' };
+    }
+    clean.currency = updates.currency.trim().toUpperCase();
+  }
+  if (updates.features !== undefined) {
+    if (!Array.isArray(updates.features) || !updates.features.every((f) => typeof f === 'string')) {
+      return { ok: false, error: 'Features must be an array of strings' };
+    }
+    clean.features = updates.features;
+  }
+  if (updates.limits !== undefined) {
+    const l = updates.limits as Partial<PlatformPlan['limits']> | null;
+    if (!l || typeof l !== 'object') {
+      return { ok: false, error: 'Limits must be an object' };
+    }
+    const keys: (keyof PlatformPlan['limits'])[] = ['users', 'statements', 'currencies', 'storage'];
+    const limits: Partial<PlatformPlan['limits']> = {};
+    for (const key of keys) {
+      const v = l[key];
+      if (v === undefined) continue;
+      if (typeof v !== 'number' || Number.isNaN(v) || v < 0) {
+        return { ok: false, error: `limits.${key} must be a non-negative number` };
+      }
+      limits[key] = v;
+    }
+    clean.limits = limits as PlatformPlan['limits'];
+  }
+  if (updates.active !== undefined) {
+    if (typeof updates.active !== 'boolean') {
+      return { ok: false, error: 'active must be a boolean' };
+    }
+    clean.active = updates.active;
+  }
+
+  return { ok: true, updates: clean };
+}
+
 // ── Service ─────────────────────────────────────────────────────────────────
 
 export const platformService = {
@@ -332,10 +394,18 @@ export const platformService = {
         body: JSON.stringify(updates),
       });
     }
+    const check = sanitizePlanUpdates(updates);
+    if (!check.ok) return { success: false, data: null as unknown as PlatformPlan, error: check.error };
     await simulateDelay(150);
+    // getPlans()/getPlanById() fall back to DEFAULT_PLATFORM_PLANS for reads when this collection
+    // is empty (e.g. a persisted bundle from before it existed) — seed it here too, so an edit to
+    // a plan the UI just displayed via that fallback doesn't fail with "Plan not found".
+    if (dataStore.platformPlans.length === 0) {
+      dataStore.platformPlans = DEFAULT_PLATFORM_PLANS.map(p => ({ ...p, limits: { ...p.limits }, features: [...p.features] }));
+    }
     const idx = dataStore.platformPlans.findIndex(p => p.id === id);
     if (idx === -1) return { success: false, data: null as unknown as PlatformPlan, error: 'Plan not found' };
-    const merged = mergePlatformPlan(dataStore.platformPlans[idx], updates);
+    const merged = mergePlatformPlan(dataStore.platformPlans[idx], check.updates);
     dataStore.platformPlans[idx] = merged;
     dataStore.notify('platformPlans');
     return { success: true, data: merged, message: 'Plan updated' };
