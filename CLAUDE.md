@@ -69,6 +69,11 @@ Nearly every workspace/overlay component is `React.lazy`-loaded; wrap new heavy 
 keep them inside the existing `ErrorBoundary` / `SilentErrorBoundary` pattern (overlays like
 `MagneticCursor`, `CommandPalette`, `AIAssistantChat` fail silently so a crash there can't blank the app).
 
+**Dead-code trap:** `src/app/components/OrganizationDashboard.tsx` and `OrganizationDashboardTest.tsx`
+still exist alongside `OrganizationDashboardModern.tsx`, but only `OrganizationDashboardModern.tsx` is
+imported in `App.tsx` (as `OrganizationDashboard`, for the `/organization` route). Check `App.tsx`'s
+imports before editing anything named `OrganizationDashboard*` — the other two are unrouted.
+
 ### Service layer is the swap boundary — never bypass it
 
 ```
@@ -173,6 +178,7 @@ does use git/GitHub). Key files, roughly in the order you'd want them:
 | `architecture/api-backend-rollout.md` | REST endpoint spec per service, by rollout wave |
 | `architecture/org-phase-plan.md` | Org workspace's 23-phase rollout checklist detail |
 | `06_decisions.md` | Dated decision log |
+| `memory/failure_library.md`, `memory/regression_cases.md`, `memory/pattern_violations.json` | Historical MARQ audit (2026-03-07) of concrete bugs found pre-Supabase (e.g. pre-stripping `ServiceResponse` before `useService`, services bypassing the `dataStore` singleton). All listed issues are since fixed per `03_project_memory.md`, but the patterns are worth not reintroducing |
 
 `.cursor/rules/*.mdc` mirror the same constraints for Cursor (`elite-core.mdc`: protect must-not-break
 flows, 3-click UX, minimal changes; `elite-frontend-ux.mdc` / `elite-services-data.mdc`: scoped to
