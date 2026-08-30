@@ -53,12 +53,26 @@ export function OrganizationsView() {
       fiscalYearStart: '01-01',
       settings: { theme: 'dark', notifications: true },
     });
-    setCreatingOrg(false);
     if (!res.success) {
+      setCreatingOrg(false);
       toast.error(res.error || 'Could not create organization.');
       return;
     }
-    toast.success(`"${name}" created on the ${newOrgPlan} plan.`);
+
+    const adminEmail = newOrgAdminEmail.trim();
+    if (adminEmail) {
+      const inviteRes = await organizationService.inviteMember(res.data.id, adminEmail, 'owner');
+      if (!inviteRes.success) {
+        toast.warning(
+          `"${name}" was created, but couldn't add ${adminEmail} as owner (${inviteRes.error || 'unknown error'}). Add an owner from Team & Permissions.`
+        );
+      } else {
+        toast.success(`"${name}" created on the ${newOrgPlan} plan. ${adminEmail} added as owner.`);
+      }
+    } else {
+      toast.success(`"${name}" created on the ${newOrgPlan} plan.`);
+    }
+    setCreatingOrg(false);
     setShowCreateForm(false);
     setNewOrgName('');
     setNewOrgAdminEmail('');

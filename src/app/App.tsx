@@ -11,6 +11,7 @@ import { PlatformLoginPage } from './components/PlatformLoginPage';
 import { EmployeeLoginPage } from './components/EmployeeLoginPage';
 import { BingLoginPage, mapToAiDestination } from './components/BingLoginPage';
 import { LoginPage } from './components/LoginPage';
+import { Toaster } from './components/ui/sonner';
 
 // Lazy load heavy workspace components
 const PlatformDashboard = React.lazy(() =>
@@ -299,6 +300,10 @@ export default function App() {
         <ThemeProvider>
           <NotificationProvider>
             <OnboardingProvider>
+              {/* Every toast.success/toast.error call across the app (Add Asset, Invite Member,
+                  Save Settings, Export, ...) was a silent no-op — sonner's <Toaster/> was never
+                  mounted anywhere, so the toast queue had nowhere to render. */}
+              <Toaster richColors position="top-right" />
               <Suspense fallback={<LoadingScreen />}>
                 <SilentErrorBoundary>
                   <MagneticCursor />

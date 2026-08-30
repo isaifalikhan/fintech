@@ -215,7 +215,13 @@ export function EmployeeHelp() {
 
   const handleContactSupport = () => {
     if (!adminEmail) return;
+    // A bare mailto: navigation gives no feedback at all when the browser/OS has no default
+    // mail client registered (common on work machines) — it just silently does nothing,
+    // which reads as a broken/unresponsive button. Always confirm what happened.
     window.location.href = `mailto:${adminEmail}?subject=${encodeURIComponent('Support request')}`;
+    toast.success(`Opening your email client to contact ${adminEmail}`, {
+      description: "If nothing opens, no default mail app is set up — email them directly at the address above.",
+    });
   };
 
   const faqs = [

@@ -9,6 +9,7 @@ import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
 import { requireOrgRole } from '../middleware/auth.js';
 import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
+import { callConfiguredAiProvider, type AiChatTurn } from '../lib/aiProviders.js';
 
 function defaultAiSettings(): OrgAiIntegrationSettings {
   return { useCustomKey: false, providerName: '', modelName: 'gpt-4o-mini', apiKey: '' };
@@ -193,6 +194,48 @@ export function createOrganizationRouter(): Router {
     store.aiSettings = { ...store.aiSettings, [orgId]: next };
     store.persist();
     ok(res, next, 'AI connection settings saved.');
+  });
+
+  /**
+   * Real chat completion using the org's own configured provider/key (`ai-settings` above).
+   * Callers (AiChatPanel via aiSettingsService) fall back to local demo replies when this
+   * returns `not_configured` or any error — this never replaces that fallback, only extends it.
+   */
+  r.post('/ai-chat', (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const settings = store.aiSettings[orgId];
+    if (!settings?.useCustomKey || !settings.apiKey.trim()) {
+      return fail(res, 400, 'not_configured');
+    }
+
+    const { message, history, systemPrompt } = req.body as {
+      message?: unknown;
+      history?: unknown;
+      systemPrompt?: unknown;
+    };
+    if (typeof message !== 'string' || !message.trim()) {
+      return fail(res, 400, 'message is required');
+    }
+    const safeHistory: AiChatTurn[] = Array.isArray(history)
+      ? history.filter(
+          (h): h is AiChatTurn =>
+            h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string',
+        )
+      : [];
+
+    void callConfiguredAiProvider({
+      providerName: settings.providerName,
+      modelName: settings.modelName,
+      apiKey: settings.apiKey,
+      systemPrompt: typeof systemPrompt === 'string' && systemPrompt.trim()
+        ? systemPrompt
+        : 'You are a helpful financial assistant for a small agency. Be concise.',
+      message,
+      history: safeHistory,
+    }).then((result) => {
+      if (!result.success) return fail(res, 502, result.error);
+      ok(res, { reply: result.reply });
+    });
   });
 
   return r;

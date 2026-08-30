@@ -19,10 +19,13 @@ export interface AiChatPanelProps {
   /** Prompt chips shown in the empty state; clicking one sends it immediately */
   quickPrompts: string[];
   /**
-   * Pluggable demo reply generator. Each caller (org, platform, ...) supplies its own
-   * canned-response logic instead of one hardcoded set living in this shared component.
+   * Pluggable reply generator. Each caller (org, platform, ...) supplies its own logic — a
+   * synchronous canned-response lookup, or an async one that calls a real backend first and
+   * falls back to a canned reply (see `AIFinancialAssistant`'s `getChatReply`).
    */
-  getReply: (text: string) => { response: string; suggestions?: string[] };
+  getReply: (
+    text: string,
+  ) => { response: string; suggestions?: string[] } | Promise<{ response: string; suggestions?: string[] }>;
   /** Placeholder text for the composer textarea */
   placeholder?: string;
   /** Helper copy shown in the empty state, above the quick prompts */
@@ -96,7 +99,7 @@ export function AiChatPanel({
         }, 700);
       });
 
-      const { response, suggestions } = getReply(raw);
+      const { response, suggestions } = await getReply(raw);
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',

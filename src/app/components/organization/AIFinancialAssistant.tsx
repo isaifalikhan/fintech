@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
-import { fetchOrgAiSettings } from '@/services/aiSettingsService';
+import { fetchOrgAiSettings, sendOrgAiChatMessage } from '@/services/aiSettingsService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
 import type { OrgAiIntegrationSettings } from '@/services/types';
@@ -139,6 +139,19 @@ export function AIFinancialAssistant() {
     window.addEventListener('finance-os-ai-settings', sync);
     return () => window.removeEventListener('finance-os-ai-settings', sync);
   }, [orgId]);
+
+  const hasLiveAiProvider = !!(aiSettings?.useCustomKey && aiSettings.apiKey.trim());
+
+  /** Tries the org's configured provider (server-side proxy) first; falls back to the local
+   *  demo reply on any failure — missing/invalid key, provider outage, or mock/Supabase mode
+   *  where there's no server to proxy through. Never throws: the fallback IS the error handling. */
+  const getChatReply = async (text: string): Promise<{ response: string; suggestions?: string[] }> => {
+    if (hasLiveAiProvider) {
+      const res = await sendOrgAiChatMessage(orgId, text, []);
+      if (res.success) return { response: res.data.reply };
+    }
+    return matchDemoReply(text);
+  };
 
   // ── Task 2: real, computed insights (Ask tab's KPI/insights below stay demo — out of scope) ──
   const { data: txnResult } = useService(
@@ -365,7 +378,7 @@ export function AIFinancialAssistant() {
             Integration: {aiSettings.providerName.trim() || 'Custom provider'}
             {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
             {aiSettings.useCustomKey && aiSettings.apiKey
-              ? ' · API key saved on this device (Integrations). Chat still uses demo replies until your backend uses this key.'
+              ? ' · Live — the Ask tab below sends real messages to this provider (local-HTTP mode only; falls back to demo replies otherwise).'
               : ''}
           </p>
         )}
@@ -446,9 +459,13 @@ export function AIFinancialAssistant() {
       {/* ORG-P04: chat panel — send path + empty state + errors in UI */}
       <AiChatPanel
         title="Ask the assistant"
-        subtitle="Demo replies for now — type a question or use a quick prompt. Live answers will use your org data when connected."
+        subtitle={
+          hasLiveAiProvider
+            ? `Connected to ${aiSettings?.providerName.trim() || 'your configured provider'} — replies come from the org's live AI connection (Integrations).`
+            : 'Demo replies for now — type a question or use a quick prompt. Connect a provider under AI Assistant → Integrations for live answers.'
+        }
         quickPrompts={CHAT_QUICK_PROMPTS}
-        getReply={matchDemoReply}
+        getReply={getChatReply}
         placeholder="Ask about cash flow, expenses, or margins…"
         emptyStateHint="Start a conversation about your finances. Answers below the fold are sample dashboards until your data is connected."
       />
