@@ -41,6 +41,20 @@ no server route exists, no env var convention exists for an LLM key — this is 
   Express server), the assistant shows an honest "requires the local API server" message instead of
   any reply. This is the one feature that structurally cannot work in mock mode — no dataStore-only
   fallback is invented for it, per this repo's "never pad with fake data" rule.
+- **Conversational scope:** this is a general, open-ended chat — like talking to Claude/ChatGPT
+  inside Finance OS — not a narrow data-lookup tool. It must handle three kinds of question in the
+  same conversation: (1) the org's/employee's real data (already designed below), (2) "how do I…" /
+  "where is…" questions about Finance OS itself, and (3) general finance/accounting knowledge
+  questions the model already knows. The system prompt does **not** restrict the model to only
+  answering from injected data — it's instructed to use the data when relevant, use its own
+  knowledge otherwise, and say so plainly only when a question needs specific data it wasn't given
+  (e.g. "I don't have visibility into X — check the Y page").
+- **Product knowledge block:** alongside the per-org/per-employee data summary, the system prompt
+  also includes a short, static "what Finance OS can do" guide (org: Transactions, Accounts,
+  Budgets, Loans, Projects, Departments, Assets, Inventory, Reports, Team, Import, Payroll, Settings;
+  employee: Timesheet, Expenses, Payslips, Projects) so how-to answers name real features instead of
+  the model guessing/hallucinating them. This is a fixed string per surface, not per-org dynamic
+  data — cheap to build, lives next to the context builders below.
 - **Context building:** the server builds the data summary itself from `server/lib/store.ts`
   (already the source of truth for every other org-scoped route), not from client-supplied numbers.
   This also means the answer doesn't depend on what happens to be cached in the browser, and a
@@ -108,9 +122,12 @@ Mounted at `/organizations/:organizationId/ai-assistant` in `apiV1.ts`, in the s
     - If `surface` doesn't match the caller's actual relationship to the org (e.g. `employee`
       surface requested by a non-member — can't happen given the org-membership gate, but validate
       anyway), reject with a 400.
-  - Compose the system prompt: role framing + the context block + an instruction to answer only
-    from the given data, be specific with numbers, and say so plainly when something isn't covered
-    rather than guessing.
+  - Compose the system prompt: role framing ("You are the AI Assistant built into Finance OS, a
+    financial-ops platform for agencies") + the static product-knowledge block for that surface +
+    the per-org/per-employee data block + an instruction to hold a normal helpful conversation —
+    answer from the data when the question is about their finances (be specific with numbers), from
+    general knowledge for finance/product questions, and say so plainly only when a question needs
+    specific data that wasn't provided, rather than inventing numbers.
   - `fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', headers: { Authorization: \`Bearer ${env.groqApiKey}\`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'llama-3.3-70b-versatile', temperature: 0.3, messages: [systemMessage, ...trimmedHistory] }) })`.
   - On a non-OK response or network failure, return a clear "Assistant is unavailable right now, try
     again in a moment" error (mirrors `AiChatPanel`'s existing `sendError` UI, already built).
@@ -204,6 +221,10 @@ No test suite in this repo (per `CLAUDE.md` §6) — verify in-browser:
 3. Same for the employee portal ("How many hours have I logged this week?") — confirm it answers
    from that employee's own timesheet, and (spot check) that a different employee's data never
    leaks in.
+3a. Ask a product how-to question ("How do I add a new expense?") and a general finance-concept
+    question ("What's the difference between cash flow and profit?") in the same conversation as a
+    data question — confirm it answers both naturally instead of refusing because they're not in
+    the injected data.
 4. `pnpm run dev` (no `dev:full`, no local API) → confirm the honest "requires the local API
    server" message appears instantly, no hung network request.
 5. Confirm the floating bubble is gone from every screen; confirm no console errors from the
