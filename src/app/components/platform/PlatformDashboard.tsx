@@ -7,10 +7,11 @@ import { OrganizationsView } from './OrganizationsView';
 import { PlansView } from './PlansView';
 import { PlatformSettingsView } from './PlatformSettingsView';
 import { PlatformAiPortal } from './PlatformAiPortal';
+import { PlatformTeamView } from './PlatformTeamView';
 
-type PlatformView = 'home' | 'organizations' | 'plans' | 'ai' | 'settings';
+type PlatformView = 'home' | 'organizations' | 'team' | 'plans' | 'ai' | 'settings';
 
-const ALL_PLATFORM_VIEWS: readonly PlatformView[] = ['home', 'organizations', 'plans', 'ai', 'settings'];
+const ALL_PLATFORM_VIEWS: readonly PlatformView[] = ['home', 'organizations', 'team', 'plans', 'ai', 'settings'];
 
 function isPlatformView(v: unknown): v is PlatformView {
   return typeof v === 'string' && (ALL_PLATFORM_VIEWS as readonly string[]).includes(v);
@@ -40,6 +41,8 @@ export function PlatformDashboard() {
         return <PlatformHome onNavigateToOrganizations={() => setCurrentView('organizations')} />;
       case 'organizations':
         return <OrganizationsView />;
+      case 'team':
+        return <PlatformTeamView />;
       case 'plans':
         return <PlansView />;
       case 'ai':

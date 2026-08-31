@@ -26,6 +26,7 @@ export function PlatformLayout({ children, currentView, onViewChange }: Platform
   const navItems = [
     { id: 'home', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'organizations', label: 'Organizations', icon: Building2 },
+    { id: 'team', label: 'Platform Team', icon: Shield },
     { id: 'plans', label: 'Plans & Billing', icon: CreditCard },
     { id: 'ai', label: 'AI Portal', icon: Brain },
     { id: 'settings', label: 'Platform Settings', icon: Settings },
