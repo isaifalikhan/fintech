@@ -36,10 +36,7 @@ const CHAT_SAMPLE_RESPONSES: { trigger: string[]; response: string; suggestions?
   },
 ];
 
-async function matchDemoReply(
-  text: string,
-  _history: any[],
-): Promise<{ response: string; suggestions?: string[] }> {
+function matchDemoReply(text: string): { response: string; suggestions?: string[] } {
   const lower = text.toLowerCase();
   const hit = CHAT_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
   if (hit) return { response: hit.response, suggestions: hit.suggestions };

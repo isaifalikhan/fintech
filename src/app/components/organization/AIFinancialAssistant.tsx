@@ -2,11 +2,10 @@ import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
-import { fetchOrgAiSettings } from '@/services/aiSettingsService';
-import { sendAiChatMessage } from '@/services/aiAssistantService';
+import { fetchOrgAiSettings, sendOrgAiChatMessage } from '@/services/aiSettingsService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
-import type { OrgAiIntegrationSettings, AiChatTurn } from '@/services/types';
+import type { OrgAiIntegrationSettings } from '@/services/types';
 import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
 import { AXIOM } from '../../../styles/axiom-tokens';
@@ -82,10 +81,7 @@ const CHAT_QUICK_PROMPTS = [
   'Explain profit margin trends',
 ];
 
-function matchDemoReply(
-  text: string,
-  _history?: AiChatTurn[],
-): { response: string; suggestions?: string[] } {
+function matchDemoReply(text: string): { response: string; suggestions?: string[] } {
   const lower = text.toLowerCase();
   const hit = CHAT_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
   if (hit) return { response: hit.response, suggestions: hit.suggestions };
@@ -149,12 +145,9 @@ export function AIFinancialAssistant() {
   /** Tries the org's configured provider (server-side proxy) first; falls back to the local
    *  demo reply on any failure — missing/invalid key, provider outage, or mock/Supabase mode
    *  where there's no server to proxy through. Never throws: the fallback IS the error handling. */
-  const getChatReply = async (
-    text: string,
-    history: AiChatTurn[],
-  ): Promise<{ response: string; suggestions?: string[] }> => {
+  const getChatReply = async (text: string): Promise<{ response: string; suggestions?: string[] }> => {
     if (hasLiveAiProvider) {
-      const res = await sendAiChatMessage(orgId, text, history, 'org');
+      const res = await sendOrgAiChatMessage(orgId, text, []);
       if (res.success) return { response: res.data.reply };
     }
     return matchDemoReply(text);
