@@ -43,17 +43,25 @@ export function buildOrgContext(organizationId: string): string {
   // outside that window) — an empty "recent" summary would be misleadingly quiet, not helpful.
   const transactionsForSummary = recent.length > 0 ? recent : allTransactions;
 
+  // Keyed by `label|currency`, not just `label` — an org can have transactions in more than one
+  // currency, and summing heterogeneous currencies together as if equivalent would feed the AI a
+  // number it would then confidently (and wrongly) state to the user. Each transaction keeps its
+  // own `t.currency`, never the org-level `currency` above (see CLAUDE.md §4).
   const categoryTotals = new Map<string, number>();
   for (const t of transactionsForSummary) {
     const cat = t.categoryId ? store.categories.find(c => c.id === t.categoryId) : undefined;
     const label = cat?.name ?? 'Uncategorized';
+    const key = `${label}|${t.currency}`;
     const signed = t.type === 'debit' ? -Math.abs(t.amount) : Math.abs(t.amount);
-    categoryTotals.set(label, (categoryTotals.get(label) ?? 0) + signed);
+    categoryTotals.set(key, (categoryTotals.get(key) ?? 0) + signed);
   }
   const categoryLines = [...categoryTotals.entries()]
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .slice(0, 10)
-    .map(([label, total]) => `  - ${label}: ${money(total, currency)}`)
+    .map(([key, total]) => {
+      const [label, txCurrency] = key.split('|');
+      return `  - ${label}: ${money(total, txCurrency)}`;
+    })
     .join('\n');
 
   const accountLines = store.bankAccounts
