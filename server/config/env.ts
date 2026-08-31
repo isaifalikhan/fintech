@@ -56,4 +56,9 @@ export const env = {
   // a clear 501 when unset instead of the server failing to boot.
   supabaseUrl: process.env.SUPABASE_URL?.trim() || '',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '',
+  // Server-only — never prefix with VITE_. Zero-config fallback for the AI Assistant chat
+  // (server/routes/organizations.ts's /ai-chat) when an org hasn't configured its own provider
+  // key under Settings → AI Assistant → Integrations. A free Groq API key. Optional — when unset
+  // and no org key is configured either, the route reports a clear "not configured" error.
+  groqApiKey: process.env.GROQ_API_KEY?.trim() || '',
 };

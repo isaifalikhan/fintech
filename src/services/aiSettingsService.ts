@@ -4,21 +4,14 @@
  * Otherwise: browser `localStorage` (demo).
  */
 
-import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
+import { isHttpBackendConfigured, apiGet, apiRequest } from '@/lib/apiClient';
 import type { OrgAiIntegrationSettings, ServiceResponse } from './types';
 import { simulateDelay } from './dataStore';
-
-export interface AiChatTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 const STORAGE_KEY = 'finance_os_org_ai_settings_v1';
 
 const AI_SETTINGS_PATH = (organizationId: string) =>
   `/organizations/${encodeURIComponent(organizationId)}/ai-settings`;
-const AI_CHAT_PATH = (organizationId: string) =>
-  `/organizations/${encodeURIComponent(organizationId)}/ai-chat`;
 
 function requireOrg<T>(organizationId: string): ServiceResponse<T> | null {
   if (!organizationId.trim()) {
@@ -232,27 +225,4 @@ export function maskApiKey(key: string): string {
   if (!key) return '';
   if (key.length <= 4) return '••••';
   return `••••••••${key.slice(-4)}`;
-}
-
-/**
- * Real chat completion via the org's configured provider (server-side proxy, so the raw key
- * never has to leave the server or be called from the browser). Only meaningful in local-HTTP
- * mode — there is no server to proxy through in mock/Supabase mode, so callers should keep
- * using the local demo replies there regardless of what's saved in `aiSettings`.
- */
-export async function sendOrgAiChatMessage(
-  organizationId: string,
-  message: string,
-  history: AiChatTurn[],
-  systemPrompt?: string,
-): Promise<ServiceResponse<{ reply: string }>> {
-  if (!isHttpBackendConfigured()) {
-    return { success: false, data: null as any, error: 'not_configured' };
-  }
-  const err = requireOrg<{ reply: string }>(organizationId);
-  if (err) return err;
-  return apiPostJson<{ message: string; history: AiChatTurn[]; systemPrompt?: string }, { reply: string }>(
-    AI_CHAT_PATH(organizationId),
-    { message, history, systemPrompt },
-  );
 }
