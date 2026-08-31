@@ -4,12 +4,15 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User } from '../../src/services/types.js';
+import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User, AiChatTurn } from '../../src/services/types.js';
 import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
 import { requireOrgRole } from '../middleware/auth.js';
 import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
-import { callConfiguredAiProvider, type AiChatTurn } from '../lib/aiProviders.js';
+import { callConfiguredAiProvider, callGroq } from '../lib/aiProviders.js';
+import { buildOrgContext, buildEmployeeContext, buildSystemPrompt } from '../lib/aiContext.js';
+import { env } from '../config/env.js';
+import { aiAssistantRateLimiter } from '../middleware/rateLimit.js';
 
 function defaultAiSettings(): OrgAiIntegrationSettings {
   return { useCustomKey: false, providerName: '', modelName: 'gpt-4o-mini', apiKey: '' };
@@ -197,24 +200,25 @@ export function createOrganizationRouter(): Router {
   });
 
   /**
-   * Real chat completion using the org's own configured provider/key (`ai-settings` above).
-   * Callers (AiChatPanel via aiSettingsService) fall back to local demo replies when this
-   * returns `not_configured` or any error — this never replaces that fallback, only extends it.
+   * Real chat completion, grounded in this organization's/employee's own data. Resolution order:
+   * (1) the org's own configured provider key (`ai-settings` above) if set, (2) the server's free
+   * Groq key (GROQ_API_KEY) as a zero-config fallback, (3) a clear "not configured" error if
+   * neither is available. No silent fallback to canned replies — an honest error either way.
    */
-  r.post('/ai-chat', (req: Request, res: Response) => {
+  r.post('/ai-chat', aiAssistantRateLimiter, async (req: Request, res: Response) => {
     const orgId = req.params.organizationId;
-    const settings = store.aiSettings[orgId];
-    if (!settings?.useCustomKey || !settings.apiKey.trim()) {
-      return fail(res, 400, 'not_configured');
-    }
+    const userId = req.authUser!.id;
 
-    const { message, history, systemPrompt } = req.body as {
+    const { message, history, surface } = req.body as {
       message?: unknown;
       history?: unknown;
-      systemPrompt?: unknown;
+      surface?: unknown;
     };
     if (typeof message !== 'string' || !message.trim()) {
       return fail(res, 400, 'message is required');
+    }
+    if (surface !== 'org' && surface !== 'employee') {
+      return fail(res, 400, 'surface must be "org" or "employee"');
     }
     const safeHistory: AiChatTurn[] = Array.isArray(history)
       ? history.filter(
@@ -223,19 +227,40 @@ export function createOrganizationRouter(): Router {
         )
       : [];
 
-    void callConfiguredAiProvider({
-      providerName: settings.providerName,
-      modelName: settings.modelName,
-      apiKey: settings.apiKey,
-      systemPrompt: typeof systemPrompt === 'string' && systemPrompt.trim()
-        ? systemPrompt
-        : 'You are a helpful financial assistant for a small agency. Be concise.',
-      message,
-      history: safeHistory,
-    }).then((result) => {
-      if (!result.success) return fail(res, 502, result.error);
-      ok(res, { reply: result.reply });
-    });
+    const settings = store.aiSettings[orgId];
+    const context =
+      surface === 'org' ? buildOrgContext(orgId) : buildEmployeeContext(orgId, userId);
+    const systemPrompt = buildSystemPrompt(surface, context);
+
+    let result;
+    if (settings?.useCustomKey && settings.apiKey.trim()) {
+      result = await callConfiguredAiProvider({
+        providerName: settings.providerName,
+        modelName: settings.modelName,
+        apiKey: settings.apiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else if (env.groqApiKey) {
+      result = await callGroq({
+        providerName: 'Groq',
+        modelName: 'llama-3.3-70b-versatile',
+        apiKey: env.groqApiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else {
+      return fail(
+        res,
+        503,
+        "AI Assistant isn't configured. Add your own AI provider key in Settings → AI Assistant → Integrations, or ask an admin to set GROQ_API_KEY on the server.",
+      );
+    }
+
+    if (!result.success) return fail(res, 502, result.error);
+    ok(res, { reply: result.reply });
   });
 
   return r;
