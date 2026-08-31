@@ -1,24 +1,37 @@
-# Real AI Assistant (Groq-backed) Implementation Plan
+# Real AI Assistant (Groq-backed, merged with existing BYOK) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the three keyword-matched demo "AI Assistant" chat surfaces (a global floating widget, the org workspace "Ask" tab, and the employee portal assistant) with one real, Groq-backed conversational assistant per remaining surface (org workspace, employee portal), grounded in that org's/employee's actual data and able to hold an open conversation (data questions, Finance OS how-to, general finance knowledge) — not a narrow lookup tool.
+**Goal:** One real, conversational AI Assistant per remaining surface (org workspace, employee portal) — grounded in that org's/employee's actual data, able to hold an open conversation (data questions, Finance OS how-to, general finance knowledge), using the org's own configured provider key when set and a free Groq key as the zero-config fallback otherwise. Removes the floating widget, the hardcoded fake "AI insight" dashboards, and every silent fallback to canned demo replies.
 
-**Architecture:** One new Express route (`/organizations/:organizationId/ai-assistant/chat`) builds a text summary of the caller's real data straight from `server/lib/store.ts`, wraps it in a system prompt, and forwards the conversation to Groq's OpenAI-compatible chat-completions endpoint via plain `fetch` — no new SDK. A new client service (`aiAssistantService.ts`) calls that route and refuses to call anything in mock/localStorage-only mode (no backend to proxy through, and an API key must never reach the browser). The existing shared `AiChatPanel.tsx` UI is kept, with its fake synchronous `getReply` prop swapped for an async `sendMessage` call to the real service.
+**Architecture:** This plan **extends already-committed code** rather than building a parallel implementation — a separate commit (`83d16b9`, on `main`, made outside this design process) already added per-org "bring your own key" chat (`server/lib/aiProviders.ts`, a `POST /organizations/:organizationId/ai-chat` route, `AiChatPanel`'s async `getReply`). This plan: (1) adds a `callGroq()` alongside the existing Anthropic/OpenAI caller, (2) extends the existing `/ai-chat` route with real server-built data context, a `surface` field so it serves both portals, and a BYOK-then-Groq-then-honest-error resolution order, (3) threads real conversation history through end-to-end (previously always sent as `[]`), (4) removes every canned-demo fallback, the fake dashboard cards, and the floating widget. See [Amendment 3](../specs/2026-08-30-ai-assistant-design.md#amendment-3--reconciled-with-the-already-committed-byok-implementation-2026-08-30) in the spec for the full reconciliation reasoning.
 
-**Tech Stack:** Express + TypeScript (server), React 18 + TypeScript + Tailwind (client), Groq API (free tier, OpenAI-compatible REST, model `llama-3.3-70b-versatile`), `express-rate-limit` (already a dependency). No test framework in this repo — verification is `pnpm run build` / manual server boot + in-browser DOM checks per [CLAUDE.md](../../../CLAUDE.md) §6.
+**Tech Stack:** Express + TypeScript (server), React 18 + TypeScript + Tailwind (client), Anthropic Messages API + OpenAI-compatible chat completions (already wired) + Groq (OpenAI-compatible, added by this plan), plain `fetch` (no SDKs), `express-rate-limit` (already a dependency). No test framework in this repo — verification is `pnpm run build` / manual server boot + in-browser DOM checks per [CLAUDE.md](../../../CLAUDE.md) §6.
 
-**Spec:** [`docs/superpowers/specs/2026-08-30-ai-assistant-design.md`](../specs/2026-08-30-ai-assistant-design.md)
+**Spec:** [`docs/superpowers/specs/2026-08-30-ai-assistant-design.md`](../specs/2026-08-30-ai-assistant-design.md) (see "Amendment 3" for why this plan's shape differs from the spec's original file list)
 
 ## Global Constraints
 
 - Use `pnpm` — `npm` is not installed on this machine.
-- Never call a service directly from a component — go through hooks (`useOrgServices`, `useAuth`, etc.); this feature's one exception is `AiChatPanel`, which is intentionally surface-agnostic and takes `sendMessage` as a prop rather than importing a service itself (existing pattern in this file, unchanged by this plan).
-- A change to `src/services/*.ts` normally needs a mirrored change in `server/routes/*.ts` — this feature is the documented exception: there is **no** mock/dataStore branch for the AI Assistant, because an LLM call requires the server (the API key must never reach the browser) and has no meaningful mock-mode equivalent. `isHttpBackendConfigured() === false` must produce an honest "not available" error, never a fake reply.
-- Never hardcode currency — every amount shown to the model must carry its own currency from the record it came from (`org.currency`, `account.currency`, `budget.currency`, etc.), never assumed.
-- Never pad with fake data — this plan explicitly removes hardcoded literal "AI insight" dashboards, it does not add new ones.
+- Never call a service directly from a component — go through hooks; `AiChatPanel` is the
+  established exception (surface-agnostic, takes `getReply` as a prop), unchanged by this plan.
+- No mock/dataStore branch for AI chat — an LLM call needs the server (no key, of either kind,
+  may ever reach the browser) and has no meaningful mock-mode equivalent.
+  `isHttpBackendConfigured() === false` must produce an honest "not available" error, never a
+  fake reply.
+- Never hardcode currency — every amount shown to the model must carry its own currency from the
+  record it came from.
+- Never pad with fake data — this plan removes hardcoded literal "AI insight" dashboards and the
+  canned-reply fallback; it must not reintroduce either.
 - `GROQ_API_KEY` is a server-only env var — never prefix with `VITE_`, never send it to the client.
-- Don't commit unless asked — this plan does NOT include git commits in its steps; stop after each task and let the user review, then commit only if asked. (Note: this differs from some other plans in this repo that do commit per task — for this feature, hold commits until the user reviews the working chat end-to-end.)
+  The org's own BYOK key (`OrgAiIntegrationSettings.apiKey`) already follows this rule (server-side
+  proxy) — preserve that.
+- Don't commit unless asked — this plan does NOT include git commits in its steps; stop after each
+  task and let the user review, then commit only if asked.
+- **Do not revert or duplicate** the already-committed, unrelated fixes in `83d16b9` (the `<Toaster/>`
+  mount in `App.tsx`, the mailto fallback toast in `EmployeeSettings.tsx`, the org-creation owner
+  invite in `OrganizationsView.tsx`) — every step below that touches a file `83d16b9` also touched
+  is written against that file's *current* content, anchored to keep those unrelated changes intact.
 
 ---
 
@@ -30,7 +43,7 @@
 - Modify: `server/middleware/rateLimit.ts`
 
 **Interfaces:**
-- Produces: `env.groqApiKey: string` (empty string when unset), `aiAssistantRateLimiter` (Express middleware, keyed per signed-in user) — both consumed by Task 3.
+- Produces: `env.groqApiKey: string` (empty string when unset), `aiAssistantRateLimiter` (Express middleware, keyed per signed-in user) — both consumed by Task 4.
 
 - [ ] **Step 1: Add `groqApiKey` to `server/config/env.ts`**
 
@@ -47,9 +60,10 @@ Replace with:
 ```ts
   supabaseUrl: process.env.SUPABASE_URL?.trim() || '',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '',
-  // Server-only — never prefix with VITE_. Powers the real AI Assistant chat
-  // (server/routes/aiAssistant.ts): a free Groq API key. Optional — when unset, the assistant
-  // route reports a clear "not configured" error instead of the server failing to boot.
+  // Server-only — never prefix with VITE_. Zero-config fallback for the AI Assistant chat
+  // (server/routes/organizations.ts's /ai-chat) when an org hasn't configured its own provider
+  // key under Settings → AI Assistant → Integrations. A free Groq API key. Optional — when unset
+  // and no org key is configured either, the route reports a clear "not configured" error.
   groqApiKey: process.env.GROQ_API_KEY?.trim() || '',
 };
 ```
@@ -61,9 +75,11 @@ Append this section at the end of the file:
 ```
 # ── AI Assistant (optional) ─────────────────────────────────────────────────
 # Read by the Express API only (server/config/env.ts) — do NOT add a VITE_ prefix, or the key
-# would ship to every client. Powers the real AI Assistant chat in the org workspace and employee
-# portal. Get a free key at https://console.groq.com/keys (no credit card required). Leave blank
-# to run without it — the assistant shows a clear "not configured" message instead of a reply.
+# would ship to every client. Zero-config fallback for the real AI Assistant chat when an org
+# hasn't set up its own provider key (Settings → AI Assistant → Integrations, which uses
+# Anthropic/OpenAI instead). Get a free key at https://console.groq.com/keys (no credit card
+# required). Leave blank to rely on org-configured keys only — orgs without one see a clear
+# "not configured" message instead of a reply.
 GROQ_API_KEY=
 ```
 
@@ -99,10 +115,10 @@ export const loginRateLimiter = rateLimit({
 });
 
 /**
- * Throttle AI Assistant chat calls: 20 messages / hour / signed-in user, so one user can't burn
- * through the shared free Groq quota. Keyed by `req.authUser!.id` rather than IP — this route is
- * always mounted under `/organizations/:organizationId`, which already runs `requireAuth` before
- * this middleware, so `req.authUser` is guaranteed set (no IP fallback needed).
+ * Throttle AI Assistant chat calls: 20 messages / hour / signed-in user — protects both the
+ * shared free Groq quota and an org's own configured key from runaway use. Keyed by
+ * `req.authUser!.id` rather than IP — this route is mounted under `/organizations/:organizationId`,
+ * which already runs `requireAuth` before this middleware, so `req.authUser` is guaranteed set.
  */
 export const aiAssistantRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -124,15 +140,18 @@ Expected: log shows the server started on port 3001, no import/type errors. Stop
 
 ---
 
-### Task 2: Shared `AiChatMessage` type
+### Task 2: Consolidate `AiChatTurn` into `src/services/types.ts`
 
 **Files:**
 - Modify: `src/services/types.ts`
+- Modify: `server/lib/aiProviders.ts`
+- Modify: `src/services/aiSettingsService.ts`
 
 **Interfaces:**
-- Produces: `AiChatMessage { role: 'user' | 'assistant'; content: string }` — consumed by Task 3 (server), Task 4 (client service), Task 5 (`AiChatPanel`).
+- Produces: `AiChatTurn { role: 'user' | 'assistant'; content: string }` in `src/services/types.ts` — the single shared definition, consumed by Task 3 (server), Task 5 (client service), Task 6 (`AiChatPanel`).
+- Removes: the two duplicate local `AiChatTurn` definitions currently in `server/lib/aiProviders.ts` and `src/services/aiSettingsService.ts`.
 
-- [ ] **Step 1: Add the type next to `OrgAiIntegrationSettings`**
+- [ ] **Step 1: Add the shared type next to `OrgAiIntegrationSettings`**
 
 Find:
 
@@ -163,54 +182,311 @@ export interface OrgAiIntegrationSettings {
   apiKey: string;
 }
 
-/** One turn in an AI Assistant conversation, sent to `/ai-assistant/chat` and echoed back in UI state. */
-export interface AiChatMessage {
+/** One turn in an AI Assistant conversation. Shared by the client chat UI/service and the
+ *  server's provider callers — previously defined twice, identically, in both places. */
+export interface AiChatTurn {
   role: 'user' | 'assistant';
   content: string;
 }
 ```
 
-- [ ] **Step 2: Verify the project still builds**
+- [ ] **Step 2: Point `server/lib/aiProviders.ts` at the shared type**
+
+Find:
+
+```ts
+export interface AiChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiProviderRequest {
+```
+
+Replace with:
+
+```ts
+import type { AiChatTurn } from '../../src/services/types.js';
+
+export interface AiProviderRequest {
+```
+
+- [ ] **Step 3: Point `src/services/aiSettingsService.ts` at the shared type**
+
+Find:
+
+```ts
+import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
+import type { OrgAiIntegrationSettings, ServiceResponse } from './types';
+import { simulateDelay } from './dataStore';
+
+export interface AiChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+const STORAGE_KEY = 'finance_os_org_ai_settings_v1';
+```
+
+Replace with:
+
+```ts
+import { isHttpBackendConfigured, apiGet, apiRequest } from '@/lib/apiClient';
+import type { OrgAiIntegrationSettings, ServiceResponse } from './types';
+import { simulateDelay } from './dataStore';
+
+const STORAGE_KEY = 'finance_os_org_ai_settings_v1';
+```
+
+(`apiPostJson` is dropped from this import because Step 4 of this task removes its only caller in
+this file, `sendOrgAiChatMessage` — that function moves to `src/services/aiAssistantService.ts` in
+Task 5, which does its own `apiPostJson` import.)
+
+- [ ] **Step 4: Remove the chat-sending function from this settings-only file**
+
+Find (the last section of the file):
+
+```ts
+/** Last 4 chars for display when masked */
+export function maskApiKey(key: string): string {
+  if (!key) return '';
+  if (key.length <= 4) return '••••';
+  return `••••••••${key.slice(-4)}`;
+}
+
+/**
+ * Real chat completion via the org's configured provider (server-side proxy, so the raw key
+ * never has to leave the server or be called from the browser). Only meaningful in local-HTTP
+ * mode — there is no server to proxy through in mock/Supabase mode, so callers should keep
+ * using the local demo replies there regardless of what's saved in `aiSettings`.
+ */
+export async function sendOrgAiChatMessage(
+  organizationId: string,
+  message: string,
+  history: AiChatTurn[],
+  systemPrompt?: string,
+): Promise<ServiceResponse<{ reply: string }>> {
+  if (!isHttpBackendConfigured()) {
+    return { success: false, data: null as any, error: 'not_configured' };
+  }
+  const err = requireOrg<{ reply: string }>(organizationId);
+  if (err) return err;
+  return apiPostJson<{ message: string; history: AiChatTurn[]; systemPrompt?: string }, { reply: string }>(
+    AI_CHAT_PATH(organizationId),
+    { message, history, systemPrompt },
+  );
+}
+```
+
+Replace with:
+
+```ts
+/** Last 4 chars for display when masked */
+export function maskApiKey(key: string): string {
+  if (!key) return '';
+  if (key.length <= 4) return '••••';
+  return `••••••••${key.slice(-4)}`;
+}
+```
+
+- [ ] **Step 5: Remove the now-unused `AI_CHAT_PATH` constant from this file**
+
+Find:
+
+```ts
+const AI_SETTINGS_PATH = (organizationId: string) =>
+  `/organizations/${encodeURIComponent(organizationId)}/ai-settings`;
+const AI_CHAT_PATH = (organizationId: string) =>
+  `/organizations/${encodeURIComponent(organizationId)}/ai-chat`;
+```
+
+Replace with:
+
+```ts
+const AI_SETTINGS_PATH = (organizationId: string) =>
+  `/organizations/${encodeURIComponent(organizationId)}/ai-settings`;
+```
+
+(Task 5 recreates this same path constant inside the new `aiAssistantService.ts` — it belongs
+there now, next to the function that uses it.)
+
+- [ ] **Step 6: Verify the project builds**
 
 ```bash
 pnpm run build
 ```
 
-Expected: no new errors (an unused-export warning, if any, is not an error — `AiChatMessage` will be consumed starting in Task 3).
+Expected: errors are expected here — `AIFinancialAssistant.tsx` still imports and calls
+`sendOrgAiChatMessage` (removed in this task) until Task 7 updates it, and
+`server/routes/organizations.ts` still imports `AiChatTurn` from `aiProviders.js` (Task 4 fixes
+that). Confirm the *only* new errors trace to those two not-yet-updated files — if anything else
+breaks, stop and fix before continuing.
 
 ---
 
-### Task 3: Server route — real Groq-backed chat
+### Task 3: Add `callGroq` to `server/lib/aiProviders.ts`
 
 **Files:**
-- Create: `server/routes/aiAssistant.ts`
-- Modify: `server/routes/apiV1.ts`
+- Modify: `server/lib/aiProviders.ts`
 
 **Interfaces:**
-- Consumes: `store.organizations/transactions/categories/bankAccounts/budgets/loans/projects/organizationMembers/expenses/timesheets/payslips` (pre-existing, `server/lib/store.ts`), `env.groqApiKey` + `aiAssistantRateLimiter` (Task 1), `AiChatMessage` (Task 2), `ok`/`fail` from `server/lib/http.js` (pre-existing), `req.authUser` (pre-existing, set by `requireAuth`).
-- Produces: `POST /api/v1/organizations/:organizationId/ai-assistant/chat` — body `{ messages: AiChatMessage[], surface: 'org' | 'employee' }`, response `{ success: true, data: { reply: string } }` or `{ success: false, error: string }` — consumed by Task 4.
+- Consumes: `AiChatTurn` (Task 2), `AiProviderRequest`/`AiProviderResult` (pre-existing in this file).
+- Produces: `callGroq(req: AiProviderRequest): Promise<AiProviderResult>` — consumed by Task 4.
 
-- [ ] **Step 1: Write `server/routes/aiAssistant.ts`**
+- [ ] **Step 1: Generalize `callOpenAiCompatible` to take a base URL and default model**
+
+Find:
+
+```ts
+async function callOpenAiCompatible(req: AiProviderRequest): Promise<AiProviderResult> {
+  const model = req.modelName?.trim() || 'gpt-4o-mini';
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${req.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: req.systemPrompt },
+          ...recentHistory(req.history),
+          { role: 'user', content: req.message },
+        ],
+      }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = (body && body.error?.message) || `OpenAI API error (${res.status})`;
+      return { success: false, error: msg };
+    }
+    const text = body?.choices?.[0]?.message?.content;
+    if (!text) return { success: false, error: 'OpenAI returned an empty response.' };
+    return { success: true, reply: text };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Could not reach OpenAI API.' };
+  }
+}
+```
+
+Replace with:
+
+```ts
+async function callOpenAiCompatible(
+  req: AiProviderRequest,
+  baseUrl: string,
+  defaultModel: string,
+  providerLabel: string,
+): Promise<AiProviderResult> {
+  const model = req.modelName?.trim() || defaultModel;
+  try {
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${req.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: req.systemPrompt },
+          ...recentHistory(req.history),
+          { role: 'user', content: req.message },
+        ],
+      }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = (body && body.error?.message) || `${providerLabel} API error (${res.status})`;
+      return { success: false, error: msg };
+    }
+    const text = body?.choices?.[0]?.message?.content;
+    if (!text) return { success: false, error: `${providerLabel} returned an empty response.` };
+    return { success: true, reply: text };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : `Could not reach ${providerLabel} API.`,
+    };
+  }
+}
+
+/** Zero-config fallback tier: Groq's endpoint is OpenAI-request-shaped, so this reuses the same
+ *  caller with Groq's base URL and free-tier model instead of a parallel implementation. */
+export async function callGroq(req: AiProviderRequest): Promise<AiProviderResult> {
+  return callOpenAiCompatible(
+    req,
+    'https://api.groq.com/openai/v1/chat/completions',
+    'llama-3.3-70b-versatile',
+    'Groq',
+  );
+}
+```
+
+- [ ] **Step 2: Update the one existing call site to pass the new required arguments**
+
+Find:
+
+```ts
+export async function callConfiguredAiProvider(req: AiProviderRequest): Promise<AiProviderResult> {
+  const name = req.providerName.toLowerCase();
+  if (name.includes('anthropic') || name.includes('claude')) {
+    return callAnthropic(req);
+  }
+  return callOpenAiCompatible(req);
+}
+```
+
+Replace with:
+
+```ts
+export async function callConfiguredAiProvider(req: AiProviderRequest): Promise<AiProviderResult> {
+  const name = req.providerName.toLowerCase();
+  if (name.includes('anthropic') || name.includes('claude')) {
+    return callAnthropic(req);
+  }
+  return callOpenAiCompatible(req, 'https://api.openai.com/v1/chat/completions', 'gpt-4o-mini', 'OpenAI');
+}
+```
+
+- [ ] **Step 3: Verify the project builds**
+
+```bash
+pnpm run build
+```
+
+Expected: no new errors in this file (the two-argument-only `callOpenAiCompatible` call from
+Step 2's "before" text no longer exists anywhere).
+
+---
+
+### Task 4: Real data context + extend the `/ai-chat` route
+
+**Files:**
+- Create: `server/lib/aiContext.ts`
+- Modify: `server/routes/organizations.ts`
+
+**Interfaces:**
+- Consumes: `store.organizations/transactions/categories/bankAccounts/budgets/loans/projects/organizationMembers/expenses/timesheets/payslips` (pre-existing, `server/lib/store.ts`), `env.groqApiKey` + `aiAssistantRateLimiter` (Task 1), `AiChatTurn` (Task 2), `callGroq` (Task 3), `callConfiguredAiProvider` (pre-existing), `ok`/`fail` (pre-existing), `req.authUser` (pre-existing).
+- Produces: `buildOrgContext(organizationId): string`, `buildEmployeeContext(organizationId, userId): string`, `buildSystemPrompt(surface, context): string` (all in `aiContext.ts`) — consumed by the route in this same task. The route's new contract: `POST /api/v1/organizations/:organizationId/ai-chat` with body `{ message: string, history: AiChatTurn[], surface: 'org' | 'employee' }`, response `{ success: true, data: { reply: string } }` or `{ success: false, error: string }` — consumed by Task 5.
+
+- [ ] **Step 1: Write `server/lib/aiContext.ts`**
 
 ```ts
 /**
- * AI Assistant — real Groq-backed chat, grounded in this organization's/employee's own data.
- * Mounted at `/organizations/:organizationId/ai-assistant` (mergeParams), already gated by
- * requireAuth + requireOrgMembership from the parent mount in apiV1.ts. Context summaries are
- * built server-side from `store` directly (never from client-supplied numbers), so a client can't
- * spoof its own financial picture and the answer doesn't depend on what's cached in the browser.
+ * Builds the real-data context and system prompt for the AI Assistant chat
+ * (`server/routes/organizations.ts`'s `/ai-chat`). Kept separate from that route file — this is
+ * data summarization, not request handling — and from `aiProviders.ts` — that file only knows how
+ * to call an external provider, not what an organization's transactions mean.
+ *
+ * Context is built server-side from `store` directly (never from client-supplied numbers), so a
+ * client can't spoof its own financial picture and the answer doesn't depend on what's cached in
+ * the browser.
  */
 
-import { Router, type Request, type Response } from 'express';
-import type { AiChatMessage } from '../../src/services/types.js';
-import { store } from '../lib/store.js';
-import { ok, fail } from '../lib/http.js';
-import { env } from '../config/env.js';
-import { aiAssistantRateLimiter } from '../middleware/rateLimit.js';
+import { store } from './store.js';
 
-const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-const HISTORY_LIMIT = 10;
 const RECENT_TRANSACTION_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 const ORG_PRODUCT_GUIDE =
@@ -218,7 +494,7 @@ const ORG_PRODUCT_GUIDE =
   '(ledger, import bank statements), Recurring Transactions, Accounts (chart of accounts + bank ' +
   'accounts), Budgets, Loans, Projects, Departments, Assets (depreciation), Inventory, Reports, ' +
   'Team & Permissions (invite members, roles), Payroll (issue payslips), Import (bank statement ' +
-  'upload + AI classification), Settings, Integrations.';
+  'upload + AI classification), Settings, Integrations (configure your own AI provider key).';
 
 const EMPLOYEE_PRODUCT_GUIDE =
   'Finance OS features available to this employee: Dashboard, My Timesheet (log hours per ' +
@@ -229,7 +505,7 @@ function money(amount: number, currency: string): string {
   return `${amount.toFixed(2)} ${currency}`;
 }
 
-function buildOrgContext(organizationId: string): string {
+export function buildOrgContext(organizationId: string): string {
   const org = store.organizations.find(o => o.id === organizationId);
   const currency = org?.currency ?? 'USD';
 
@@ -313,7 +589,7 @@ function buildOrgContext(organizationId: string): string {
     .join('\n');
 }
 
-function buildEmployeeContext(organizationId: string, userId: string): string {
+export function buildEmployeeContext(organizationId: string, userId: string): string {
   const timesheets = store.timesheets.filter(
     t => t.organizationId === organizationId && t.userId === userId,
   );
@@ -353,7 +629,7 @@ function buildEmployeeContext(organizationId: string, userId: string): string {
   ].join('\n');
 }
 
-function buildSystemPrompt(surface: 'org' | 'employee', context: string): string {
+export function buildSystemPrompt(surface: 'org' | 'employee', context: string): string {
   const guide = surface === 'org' ? ORG_PRODUCT_GUIDE : EMPLOYEE_PRODUCT_GUIDE;
   return [
     'You are the AI Assistant built into Finance OS, a financial-ops platform for agencies and ' +
@@ -372,151 +648,201 @@ function buildSystemPrompt(surface: 'org' | 'employee', context: string): string
     '- Keep answers clear and reasonably concise unless the user asks for more detail.',
   ].join('\n');
 }
+```
 
-function isChatMessage(value: unknown): value is AiChatMessage {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  return (
-    (v.role === 'user' || v.role === 'assistant') &&
-    typeof v.content === 'string' &&
-    v.content.trim().length > 0
-  );
-}
+- [ ] **Step 2: Rewrite the `/ai-chat` route's imports**
 
-export function createAiAssistantRouter(): Router {
-  const r = Router({ mergeParams: true });
+Find:
 
-  r.post('/chat', aiAssistantRateLimiter, async (req: Request, res: Response) => {
-    const organizationId = req.params.organizationId;
-    const userId = req.authUser!.id;
-    const body = req.body as { messages?: unknown; surface?: unknown };
+```ts
+import { Router, type Request, type Response } from 'express';
+import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User } from '../../src/services/types.js';
+import { store } from '../lib/store.js';
+import { ok, created, fail, notFound } from '../lib/http.js';
+import { requireOrgRole } from '../middleware/auth.js';
+import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
+import { callConfiguredAiProvider, type AiChatTurn } from '../lib/aiProviders.js';
+```
 
-    if (
-      !Array.isArray(body.messages) ||
-      body.messages.length === 0 ||
-      !body.messages.every(isChatMessage)
-    ) {
-      return fail(res, 400, 'messages is required (a non-empty array of {role, content})');
+Replace with:
+
+```ts
+import { Router, type Request, type Response } from 'express';
+import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User, AiChatTurn } from '../../src/services/types.js';
+import { store } from '../lib/store.js';
+import { ok, created, fail, notFound } from '../lib/http.js';
+import { requireOrgRole } from '../middleware/auth.js';
+import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
+import { callConfiguredAiProvider, callGroq } from '../lib/aiProviders.js';
+import { buildOrgContext, buildEmployeeContext, buildSystemPrompt } from '../lib/aiContext.js';
+import { env } from '../config/env.js';
+import { aiAssistantRateLimiter } from '../middleware/rateLimit.js';
+```
+
+- [ ] **Step 3: Replace the `/ai-chat` handler**
+
+Find:
+
+```ts
+  /**
+   * Real chat completion using the org's own configured provider/key (`ai-settings` above).
+   * Callers (AiChatPanel via aiSettingsService) fall back to local demo replies when this
+   * returns `not_configured` or any error — this never replaces that fallback, only extends it.
+   */
+  r.post('/ai-chat', (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const settings = store.aiSettings[orgId];
+    if (!settings?.useCustomKey || !settings.apiKey.trim()) {
+      return fail(res, 400, 'not_configured');
     }
-    if (body.surface !== 'org' && body.surface !== 'employee') {
-      return fail(res, 400, 'surface must be "org" or "employee"');
+
+    const { message, history, systemPrompt } = req.body as {
+      message?: unknown;
+      history?: unknown;
+      systemPrompt?: unknown;
+    };
+    if (typeof message !== 'string' || !message.trim()) {
+      return fail(res, 400, 'message is required');
     }
+    const safeHistory: AiChatTurn[] = Array.isArray(history)
+      ? history.filter(
+          (h): h is AiChatTurn =>
+            h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string',
+        )
+      : [];
 
-    if (!env.groqApiKey) {
-      return fail(res, 503, "AI Assistant isn't configured. Ask an admin to set GROQ_API_KEY.");
-    }
-
-    const messages = body.messages as AiChatMessage[];
-    const context =
-      body.surface === 'org'
-        ? buildOrgContext(organizationId)
-        : buildEmployeeContext(organizationId, userId);
-    const systemPrompt = buildSystemPrompt(body.surface, context);
-    const history = messages.slice(-HISTORY_LIMIT);
-
-    try {
-      const groqRes = await fetch(GROQ_CHAT_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${env.groqApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          temperature: 0.3,
-          messages: [{ role: 'system', content: systemPrompt }, ...history],
-        }),
-      });
-
-      if (!groqRes.ok) {
-        console.error('[ai-assistant] Groq API error', groqRes.status, await groqRes.text());
-        return fail(res, 502, 'Assistant is unavailable right now. Try again in a moment.');
-      }
-
-      const data = (await groqRes.json()) as { choices?: { message?: { content?: string } }[] };
-      const reply = data.choices?.[0]?.message?.content?.trim();
-      if (!reply) {
-        return fail(res, 502, 'Assistant is unavailable right now. Try again in a moment.');
-      }
-      ok(res, { reply });
-    } catch (err) {
-      console.error('[ai-assistant] request failed', err);
-      fail(res, 502, 'Assistant is unavailable right now. Try again in a moment.');
-    }
+    void callConfiguredAiProvider({
+      providerName: settings.providerName,
+      modelName: settings.modelName,
+      apiKey: settings.apiKey,
+      systemPrompt: typeof systemPrompt === 'string' && systemPrompt.trim()
+        ? systemPrompt
+        : 'You are a helpful financial assistant for a small agency. Be concise.',
+      message,
+      history: safeHistory,
+    }).then((result) => {
+      if (!result.success) return fail(res, 502, result.error);
+      ok(res, { reply: result.reply });
+    });
   });
 
   return r;
 }
 ```
 
-- [ ] **Step 2: Mount the router in `server/routes/apiV1.ts`**
-
-Find the import block:
-
-```ts
-import { createEmployeeMeRouter } from './employee.js';
-```
-
-Add right below it (check the actual import name used for the payroll router in this repo — if `createPayrollRouter` is already imported on the next line, add this new import right after that one instead; either position is fine as long as it's grouped with the other org-scoped router imports):
-
-```ts
-import { createAiAssistantRouter } from './aiAssistant.js';
-```
-
-Then find the mount list:
-
-```ts
-  r.use('/organizations/:organizationId/me', createEmployeeMeRouter());
-  r.use('/organizations/:organizationId/payroll', createPayrollRouter());
-```
-
 Replace with:
 
 ```ts
-  r.use('/organizations/:organizationId/me', createEmployeeMeRouter());
-  r.use('/organizations/:organizationId/payroll', createPayrollRouter());
-  r.use('/organizations/:organizationId/ai-assistant', createAiAssistantRouter());
+  /**
+   * Real chat completion, grounded in this organization's/employee's own data. Resolution order:
+   * (1) the org's own configured provider key (`ai-settings` above) if set, (2) the server's free
+   * Groq key (GROQ_API_KEY) as a zero-config fallback, (3) a clear "not configured" error if
+   * neither is available. No silent fallback to canned replies — an honest error either way.
+   */
+  r.post('/ai-chat', aiAssistantRateLimiter, async (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const userId = req.authUser!.id;
+
+    const { message, history, surface } = req.body as {
+      message?: unknown;
+      history?: unknown;
+      surface?: unknown;
+    };
+    if (typeof message !== 'string' || !message.trim()) {
+      return fail(res, 400, 'message is required');
+    }
+    if (surface !== 'org' && surface !== 'employee') {
+      return fail(res, 400, 'surface must be "org" or "employee"');
+    }
+    const safeHistory: AiChatTurn[] = Array.isArray(history)
+      ? history.filter(
+          (h): h is AiChatTurn =>
+            h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string',
+        )
+      : [];
+
+    const settings = store.aiSettings[orgId];
+    const context =
+      surface === 'org' ? buildOrgContext(orgId) : buildEmployeeContext(orgId, userId);
+    const systemPrompt = buildSystemPrompt(surface, context);
+
+    let result;
+    if (settings?.useCustomKey && settings.apiKey.trim()) {
+      result = await callConfiguredAiProvider({
+        providerName: settings.providerName,
+        modelName: settings.modelName,
+        apiKey: settings.apiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else if (env.groqApiKey) {
+      result = await callGroq({
+        providerName: 'Groq',
+        modelName: 'llama-3.3-70b-versatile',
+        apiKey: env.groqApiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else {
+      return fail(
+        res,
+        503,
+        "AI Assistant isn't configured. Add your own AI provider key in Settings → AI Assistant → Integrations, or ask an admin to set GROQ_API_KEY on the server.",
+      );
+    }
+
+    if (!result.success) return fail(res, 502, result.error);
+    ok(res, { reply: result.reply });
+  });
+
+  return r;
+}
 ```
 
-(If `createPayrollRouter`/the payroll mount line isn't present in the file as written above — plans can drift from the live file — add the `ai-assistant` import and mount line directly after the `createEmployeeMeRouter` import/mount instead, following the exact same one-line pattern.)
-
-- [ ] **Step 3: Verify the server boots and the route registers**
+- [ ] **Step 4: Verify the server boots and the route registers**
 
 ```bash
 pnpm run dev:server
 ```
 
-Expected: server starts on port 3001 with no route-registration errors (Express throws immediately at boot if a router is malformed). Stop with Ctrl+C once confirmed. Full functional verification (an actual Groq reply) happens in Task 9, once the client can reach this route.
+Expected: server starts on port 3001 with no route-registration or import errors. Stop with
+Ctrl+C once confirmed. Full functional verification (an actual reply, from either provider tier)
+happens in Task 8, once the client can reach this route.
 
 ---
 
-### Task 4: Client service — `aiAssistantService.ts`
+### Task 5: Client service — `aiAssistantService.ts`
 
 **Files:**
 - Create: `src/services/aiAssistantService.ts`
 
 **Interfaces:**
-- Consumes: `isHttpBackendConfigured`, `apiPostJson` from `@/lib/apiClient` (pre-existing), `AiChatMessage`, `ServiceResponse` from `./types` (Task 2; `ServiceResponse` pre-existing).
-- Produces: `sendAiChatMessage(organizationId: string, messages: AiChatMessage[], surface: 'org' | 'employee'): Promise<ServiceResponse<{ reply: string }>>` — consumed by Task 6 and Task 7.
+- Consumes: `isHttpBackendConfigured`, `apiPostJson` from `@/lib/apiClient` (pre-existing), `AiChatTurn`, `ServiceResponse` from `./types` (Task 2; `ServiceResponse` pre-existing).
+- Produces: `sendAiChatMessage(organizationId: string, message: string, history: AiChatTurn[], surface: 'org' | 'employee'): Promise<ServiceResponse<{ reply: string }>>` — consumed by Task 6 and Task 7.
 
 - [ ] **Step 1: Write `src/services/aiAssistantService.ts`**
 
 ```ts
 /**
- * AI Assistant chat — real Groq-backed replies via the Express server (`server/routes/aiAssistant.ts`).
- * Deliberately has no dataStore/mock-mode branch: an LLM call needs the server (the API key must
- * never reach the browser), so mock mode gets an honest "not available" error, never a fake reply.
+ * AI Assistant chat — real replies via the Express server's `/ai-chat` route
+ * (`server/routes/organizations.ts`), which resolves to the org's own configured provider key or
+ * the server's free Groq fallback. Deliberately has no dataStore/mock-mode branch: an LLM call
+ * needs the server (no key may ever reach the browser), so mock mode gets an honest "not
+ * available" error, never a fake reply.
  */
 
 import { isHttpBackendConfigured, apiPostJson } from '@/lib/apiClient';
-import type { AiChatMessage, ServiceResponse } from './types';
+import type { AiChatTurn, ServiceResponse } from './types';
 
-const CHAT_PATH = (organizationId: string) =>
-  `/organizations/${encodeURIComponent(organizationId)}/ai-assistant/chat`;
+const AI_CHAT_PATH = (organizationId: string) =>
+  `/organizations/${encodeURIComponent(organizationId)}/ai-chat`;
 
 export async function sendAiChatMessage(
   organizationId: string,
-  messages: AiChatMessage[],
+  message: string,
+  history: AiChatTurn[],
   surface: 'org' | 'employee',
 ): Promise<ServiceResponse<{ reply: string }>> {
   if (!organizationId.trim()) {
@@ -532,10 +858,10 @@ export async function sendAiChatMessage(
     };
   }
 
-  return apiPostJson<{ messages: AiChatMessage[]; surface: 'org' | 'employee' }, { reply: string }>(
-    CHAT_PATH(organizationId),
-    { messages, surface },
-  );
+  return apiPostJson<
+    { message: string; history: AiChatTurn[]; surface: 'org' | 'employee' },
+    { reply: string }
+  >(AI_CHAT_PATH(organizationId), { message, history, surface });
 }
 ```
 
@@ -545,20 +871,21 @@ export async function sendAiChatMessage(
 pnpm run build
 ```
 
-Expected: no new errors.
+Expected: no errors in this new file (errors elsewhere referencing `sendOrgAiChatMessage` are
+expected until Task 7 — see that task).
 
 ---
 
-### Task 5: `AiChatPanel.tsx` — swap fake `getReply` for real async `sendMessage`
+### Task 6: `AiChatPanel.tsx` — thread real conversation history
 
 **Files:**
 - Modify: `src/app/components/shared/AiChatPanel.tsx`
 
 **Interfaces:**
-- Consumes: `AiChatMessage` (Task 2).
-- Produces: `AiChatPanelProps.sendMessage: (history: AiChatMessage[]) => Promise<string>` — consumed by Task 6 and Task 7 (replacing the old `getReply` prop everywhere it's used).
+- Consumes: `AiChatTurn` (Task 2).
+- Produces: `AiChatPanelProps.getReply: (text: string, history: AiChatTurn[]) => Promise<{ response: string; suggestions?: string[] }>` — consumed by Task 7 and Task 8 (replacing the current single-argument `getReply` everywhere it's used).
 
-- [ ] **Step 1: Add the `AiChatMessage` import**
+- [ ] **Step 1: Add the `AiChatTurn` import**
 
 Find:
 
@@ -574,37 +901,10 @@ Replace with:
 import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send, Loader2, MessageCircle } from 'lucide-react';
-import type { AiChatMessage } from '@/services/types';
+import type { AiChatTurn } from '@/services/types';
 ```
 
-- [ ] **Step 2: Drop `suggestions` from the internal message shape**
-
-Find:
-
-```ts
-type ChatRole = 'user' | 'assistant';
-
-interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  suggestions?: string[];
-}
-```
-
-Replace with:
-
-```ts
-type ChatRole = 'user' | 'assistant';
-
-interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-}
-```
-
-- [ ] **Step 3: Swap the `getReply` prop for `sendMessage`**
+- [ ] **Step 2: Widen `getReply` to take conversation history**
 
 Find:
 
@@ -617,10 +917,13 @@ export interface AiChatPanelProps {
   /** Prompt chips shown in the empty state; clicking one sends it immediately */
   quickPrompts: string[];
   /**
-   * Pluggable demo reply generator. Each caller (org, platform, ...) supplies its own
-   * canned-response logic instead of one hardcoded set living in this shared component.
+   * Pluggable reply generator. Each caller (org, platform, ...) supplies its own logic — a
+   * synchronous canned-response lookup, or an async one that calls a real backend first and
+   * falls back to a canned reply (see `AIFinancialAssistant`'s `getChatReply`).
    */
-  getReply: (text: string) => { response: string; suggestions?: string[] };
+  getReply: (
+    text: string,
+  ) => { response: string; suggestions?: string[] } | Promise<{ response: string; suggestions?: string[] }>;
   /** Placeholder text for the composer textarea */
   placeholder?: string;
   /** Helper copy shown in the empty state, above the quick prompts */
@@ -639,12 +942,16 @@ export interface AiChatPanelProps {
   /** Prompt chips shown in the empty state; clicking one sends it immediately */
   quickPrompts: string[];
   /**
-   * Sends the full conversation (including the newest user message) to a real backend and
-   * resolves with the assistant's reply text. Each caller (org, employee, ...) supplies its own
-   * org/surface-scoped call instead of this shared component knowing about services directly.
-   * Throw (or reject with) an Error to surface a message via the panel's built-in error banner.
+   * Sends the new message plus everything said so far (oldest first, not including the new
+   * message) to a real backend and resolves with the assistant's reply. Each caller (org,
+   * employee, ...) supplies its own org/surface-scoped call — see `AIFinancialAssistant`'s and
+   * `EmployeeAiAssistant`'s `getChatReply`. Throw (or reject with) an Error to surface a message
+   * via the panel's built-in error banner.
    */
-  sendMessage: (history: AiChatMessage[]) => Promise<string>;
+  getReply: (
+    text: string,
+    history: AiChatTurn[],
+  ) => Promise<{ response: string; suggestions?: string[] }>;
   /** Placeholder text for the composer textarea */
   placeholder?: string;
   /** Helper copy shown in the empty state, above the quick prompts */
@@ -652,35 +959,7 @@ export interface AiChatPanelProps {
 }
 ```
 
-- [ ] **Step 4: Update the component signature's destructured prop and default hint copy**
-
-Find:
-
-```ts
-export function AiChatPanel({
-  title,
-  subtitle,
-  quickPrompts,
-  getReply,
-  placeholder = 'Ask a question…',
-  emptyStateHint = 'Start a conversation. Answers below are sample data until this is connected to a live backend.',
-}: AiChatPanelProps) {
-```
-
-Replace with:
-
-```ts
-export function AiChatPanel({
-  title,
-  subtitle,
-  quickPrompts,
-  sendMessage,
-  placeholder = 'Ask a question…',
-  emptyStateHint = 'Start a conversation and ask anything about your finances or Finance OS.',
-}: AiChatPanelProps) {
-```
-
-- [ ] **Step 5: Rewrite `handleSend` to call `sendMessage` instead of the fake delay + `getReply`**
+- [ ] **Step 3: Pass history through `handleSend`, drop the fake-delay/error-demo scaffolding**
 
 Find:
 
@@ -712,7 +991,7 @@ Find:
         }, 700);
       });
 
-      const { response, suggestions } = getReply(raw);
+      const { response, suggestions } = await getReply(raw);
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
@@ -738,6 +1017,13 @@ Replace with:
     if (raw.length > CHAT_INPUT_MAX) return;
     setSendError(null);
 
+    // History sent to getReply is everything said BEFORE this new message — captured from state
+    // now, before the user bubble below is added to it.
+    const historyBeforeThisMessage: AiChatTurn[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -749,15 +1035,12 @@ Replace with:
     setSending(true);
 
     try {
-      const history: AiChatMessage[] = [...messages, userMsg].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const reply = await sendMessage(history);
+      const { response, suggestions } = await getReply(raw, historyBeforeThisMessage);
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: reply,
+        content: response,
+        suggestions,
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (e) {
@@ -766,57 +1049,34 @@ Replace with:
     } finally {
       setSending(false);
     }
-  }, [input, sending, messages, sendMessage]);
+  }, [input, sending, messages, getReply]);
 ```
 
-- [ ] **Step 6: Remove the per-message suggestion-chip rendering**
-
-Find:
-
-```tsx
-                {m.content}
-                {m.role === 'assistant' && m.suggestions && m.suggestions.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-600/50 pt-3">
-                    {m.suggestions.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => void handleSend(s)}
-                        disabled={sending}
-                        className="rounded-full border border-slate-600 bg-transparent px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-```
-
-Replace with:
-
-```tsx
-                {m.content}
-```
-
-- [ ] **Step 7: Verify the project builds**
+- [ ] **Step 4: Verify the project builds**
 
 ```bash
 pnpm run build
 ```
 
-Expected: errors at this point are expected and fine — `AIFinancialAssistant.tsx` and `EmployeeAiAssistant.tsx` still pass the old `getReply` prop until Task 6/7 update them. Confirm the *only* new errors are exactly those two files complaining about a missing/mismatched `getReply`/`sendMessage` prop — if anything else is broken, stop and fix it before continuing.
+Expected: errors at this point are expected and fine — `AIFinancialAssistant.tsx` and
+`EmployeeAiAssistant.tsx` still pass a single-argument `getReply` until Task 7 updates them.
+Confirm the *only* new errors are exactly those two files' `getReply` mismatching — if anything
+else is broken, stop and fix it before continuing.
 
 ---
 
-### Task 6: Wire `AIFinancialAssistant.tsx` to the real assistant, remove the fake dashboards
+### Task 7: Wire both surfaces to the real, history-aware assistant
 
 **Files:**
 - Modify: `src/app/components/organization/AIFinancialAssistant.tsx`
+- Modify: `src/app/components/employee/EmployeeAiAssistant.tsx`
 
 **Interfaces:**
-- Consumes: `sendAiChatMessage` (Task 4), `AiChatMessage` (Task 2), `AiChatPanelProps.sendMessage` (Task 5).
+- Consumes: `sendAiChatMessage` (Task 5), `AiChatTurn` (Task 2), `AiChatPanelProps.getReply` (Task 6).
 
-- [ ] **Step 1: Trim the icon imports and add `useCallback` + the new service import**
+#### Part A — `AIFinancialAssistant.tsx`
+
+- [ ] **Step 1: Trim the icon imports, swap the settings-service import for the new chat service**
 
 Find:
 
@@ -825,7 +1085,7 @@ import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
-import { fetchOrgAiSettings } from '@/services/aiSettingsService';
+import { fetchOrgAiSettings, sendOrgAiChatMessage } from '@/services/aiSettingsService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
 import type { OrgAiIntegrationSettings } from '@/services/types';
@@ -863,10 +1123,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
 import { fetchOrgAiSettings } from '@/services/aiSettingsService';
+import { sendAiChatMessage } from '@/services/aiAssistantService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
-import { sendAiChatMessage } from '@/services/aiAssistantService';
-import type { AiChatMessage, OrgAiIntegrationSettings } from '@/services/types';
+import type { AiChatTurn, OrgAiIntegrationSettings } from '@/services/types';
 import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
 import { AXIOM } from '../../../styles/axiom-tokens';
@@ -886,7 +1146,7 @@ import {
 } from 'lucide-react';
 ```
 
-- [ ] **Step 2: Remove the unused `AIInsight`/`FinancialPattern` types and the fake reply table**
+- [ ] **Step 2: Remove the unused `AIInsight`/`FinancialPattern` types and the canned-reply table**
 
 Find:
 
@@ -964,34 +1224,42 @@ const CHAT_QUICK_PROMPTS = [
 ];
 ```
 
-- [ ] **Step 3: Add the real `sendMessage` callback inside the component**
+- [ ] **Step 3: Rewrite `getChatReply` to call the real service with real history, drop the BYOK-only gate**
 
-Find (the start of the component body):
+Find:
 
 ```ts
-export function AIFinancialAssistant() {
-  const svc = useOrgServices();
-  const { orgId } = svc;
-  const goToOrgView = useOrgWorkspaceNav();
+  const hasLiveAiProvider = !!(aiSettings?.useCustomKey && aiSettings.apiKey.trim());
+
+  /** Tries the org's configured provider (server-side proxy) first; falls back to the local
+   *  demo reply on any failure — missing/invalid key, provider outage, or mock/Supabase mode
+   *  where there's no server to proxy through. Never throws: the fallback IS the error handling. */
+  const getChatReply = async (text: string): Promise<{ response: string; suggestions?: string[] }> => {
+    if (hasLiveAiProvider) {
+      const res = await sendOrgAiChatMessage(orgId, text, []);
+      if (res.success) return { response: res.data.reply };
+    }
+    return matchDemoReply(text);
+  };
 ```
 
 Replace with:
 
 ```ts
-export function AIFinancialAssistant() {
-  const svc = useOrgServices();
-  const { orgId } = svc;
-  const goToOrgView = useOrgWorkspaceNav();
-
-  const sendAssistantMessage = useCallback(
-    async (history: AiChatMessage[]): Promise<string> => {
-      const res = await sendAiChatMessage(orgId, history, 'org');
+  /** Server resolves the org's own configured provider key first, then the free Groq fallback,
+   *  then an honest "not configured" error — this component doesn't need to know which. */
+  const getChatReply = useCallback(
+    async (text: string, history: AiChatTurn[]): Promise<{ response: string }> => {
+      const res = await sendAiChatMessage(orgId, text, history, 'org');
       if (!res.success) throw new Error(res.error || 'Something went wrong. Try again.');
-      return res.data.reply;
+      return { response: res.data.reply };
     },
     [orgId],
   );
 ```
+
+(`aiSettings`/`fetchOrgAiSettings` stay — they still drive the real "Integration: ..." display line
+elsewhere in this file, which is untouched by this task.)
 
 - [ ] **Step 4: Remove the hardcoded `currentSituation`/`futureProjections` data objects**
 
@@ -1087,11 +1355,40 @@ Replace with:
   return (
 ```
 
-(Both this step and Step 4 delete a `return (` line — only one `return (` should remain once both edits are applied; make sure you don't end up with two.)
+(Both this step and Step 4 delete a `return (` line — only one `return (` should remain once both
+edits are applied; make sure you don't end up with two.)
 
 - [ ] **Step 6: Replace the "Ask" tab's JSX — real chat only, drop the fake dashboards**
 
-Find (the entire `activeTab === 'ask'` block — from its opening through the header/description above it, since the header's "Integration:" line about the unused BYOK settings is also being simplified):
+Find (the header's AI-settings line and the opening of the `activeTab === 'ask'` block):
+
+```tsx
+        {aiSettings && (aiSettings.providerName.trim() || aiSettings.modelName.trim()) && (
+          <p className="text-slate-500 text-xs mt-2 max-w-2xl leading-relaxed">
+            Integration: {aiSettings.providerName.trim() || 'Custom provider'}
+            {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
+            {aiSettings.useCustomKey && aiSettings.apiKey
+              ? ' · API key saved on this device (Integrations). Chat still uses demo replies until your backend uses this key.'
+              : ''}
+          </p>
+        )}
+```
+
+Replace with:
+
+```tsx
+        {aiSettings && (aiSettings.providerName.trim() || aiSettings.modelName.trim()) && (
+          <p className="text-slate-500 text-xs mt-2 max-w-2xl leading-relaxed">
+            Integration: {aiSettings.providerName.trim() || 'Custom provider'}
+            {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
+            {aiSettings.useCustomKey && aiSettings.apiKey
+              ? ' · This key powers the chat below.'
+              : ''}
+          </p>
+        )}
+```
+
+Then find:
 
 ```tsx
       {activeTab === 'ask' && (
@@ -1115,14 +1412,15 @@ Replace with:
           title="Ask the assistant"
           subtitle="Real answers grounded in your organization's data — ask about cash flow, expenses, margins, how to use Finance OS, or general finance questions."
           quickPrompts={CHAT_QUICK_PROMPTS}
-          sendMessage={sendAssistantMessage}
+          getReply={getChatReply}
           placeholder="Ask about cash flow, expenses, margins, or how to use Finance OS…"
           emptyStateHint="Start a conversation about your organization's finances or Finance OS itself."
         />
       )}
 ```
 
-Then find the (now-orphaned) remainder of that block — everything from the "Current Situation" section through the closing of the `ask` tab — and delete it entirely:
+Then find the (now-orphaned) remainder of that block — from the "Current Situation" section
+through the end of the `ask` tab:
 
 Find the start marker:
 
@@ -1130,7 +1428,7 @@ Find the start marker:
       {/* Current Situation - Dashboard Style */}
 ```
 
-...through the end marker (the block ends right before the Insights tab):
+...through the end marker (right before the Insights tab):
 
 ```tsx
       </>
@@ -1139,70 +1437,44 @@ Find the start marker:
       {/* Task 2: real, computed Insights tab */}
 ```
 
-Delete every line from the start marker through `      </>\n      )}\n\n` (inclusive), **keeping** the `{/* Task 2: real, computed Insights tab */}` line and everything after it unchanged. This removes the "Current Situation", "Future Projections", "AI-Generated Insights", "Detected Financial Patterns", and "How AI Financial Assistant Works" sections — all of which rendered the literal hardcoded numbers just deleted in Steps 4–5, not real data. The already-real Insights tab (`activeTab === 'insights'`) and Activity tab (`activeTab === 'activity'`) that follow are untouched.
+Delete every line from the start marker through `      </>\n      )}\n\n` (inclusive), **keeping**
+the `{/* Task 2: real, computed Insights tab */}` line and everything after it unchanged. This
+removes "Current Situation", "Future Projections", "AI-Generated Insights", "Detected Financial
+Patterns", and "How AI Financial Assistant Works" — all rendering the literal hardcoded numbers
+just deleted in Steps 4–5. The already-real Insights tab (`activeTab === 'insights'`) and Activity
+tab (`activeTab === 'activity'`) that follow are untouched.
 
-- [ ] **Step 7: Simplify the header's AI-settings line (it referenced the old demo chat)**
-
-Find:
-
-```tsx
-        {aiSettings && (aiSettings.providerName.trim() || aiSettings.modelName.trim()) && (
-          <p className="text-slate-500 text-xs mt-2 max-w-2xl leading-relaxed">
-            Integration: {aiSettings.providerName.trim() || 'Custom provider'}
-            {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
-            {aiSettings.useCustomKey && aiSettings.apiKey
-              ? ' · API key saved on this device (Integrations). Chat still uses demo replies until your backend uses this key.'
-              : ''}
-          </p>
-        )}
-```
-
-Replace with:
-
-```tsx
-        {aiSettings && (aiSettings.providerName.trim() || aiSettings.modelName.trim()) && (
-          <p className="text-slate-500 text-xs mt-2 max-w-2xl leading-relaxed">
-            Integration: {aiSettings.providerName.trim() || 'Custom provider'}
-            {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
-            {' · The chat below uses the server-side AI Assistant, not this saved key.'}
-          </p>
-        )}
-```
-
-- [ ] **Step 8: Verify the project builds**
+- [ ] **Step 7: Verify the project builds**
 
 ```bash
 pnpm run build
 ```
 
-Expected: no errors referencing this file (unused `AIInsight`/`FinancialPattern`/`CHAT_SAMPLE_RESPONSES`/`matchDemoReply`/`currentSituation`/`futureProjections`/`aiInsights`/`financialPatterns` should all be gone; no leftover references to any of them).
+Expected: no errors referencing this file (unused `AIInsight`/`FinancialPattern`/
+`CHAT_SAMPLE_RESPONSES`/`matchDemoReply`/`hasLiveAiProvider`/`currentSituation`/
+`futureProjections`/`aiInsights`/`financialPatterns` should all be gone; no leftover references).
 
-- [ ] **Step 9: Smoke-check the page in the browser**
+- [ ] **Step 8: Smoke-check the page in the browser**
 
 ```bash
 pnpm run dev:full
 ```
 
-Open `/login/owner`, sign in, navigate to `?view=ai-assistant` (or the AI Assistant nav item). In the browser devtools console:
+Open `/login/owner`, sign in, navigate to `?view=ai-assistant` (or the AI Assistant nav item). In
+the browser devtools console:
 
 ```js
 const t = document.body.innerText;
 [t.includes('Something went wrong'), /is not defined/.test(t)]
 ```
 
-Expected: `[false, false]`. Confirm the page shows only the chat panel under the "Ask" tab (no "Current Financial Situation" / "Future Projections" / "Detected Financial Patterns" cards), and that Insights/Activity tabs still render as before.
+Expected: `[false, false]`. Confirm the page shows only the chat panel under the "Ask" tab (no
+"Current Financial Situation" / "Future Projections" / "Detected Financial Patterns" cards), and
+that Insights/Activity tabs still render as before.
 
----
+#### Part B — `EmployeeAiAssistant.tsx`
 
-### Task 7: Wire `EmployeeAiAssistant.tsx` to the real assistant
-
-**Files:**
-- Modify: `src/app/components/employee/EmployeeAiAssistant.tsx`
-
-**Interfaces:**
-- Consumes: `sendAiChatMessage` (Task 4), `AiChatMessage` (Task 2), `AiChatPanelProps.sendMessage` (Task 5), `useAuth` from `@/contexts/AuthContext` (pre-existing — same `currentOrganization?.id ?? 'org-001'` pattern already used by `MyExpenses.tsx`/`MyPayslips.tsx`/`EmployeeDashboard.tsx` in this same folder).
-
-- [ ] **Step 1: Update imports**
+- [ ] **Step 9: Update imports**
 
 Find:
 
@@ -1226,11 +1498,11 @@ import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendAiChatMessage } from '@/services/aiAssistantService';
-import type { AiChatMessage } from '@/services/types';
+import type { AiChatTurn } from '@/services/types';
 import type { EmployeeView } from './EmployeeWorkspace';
 ```
 
-- [ ] **Step 2: Remove the fake reply table**
+- [ ] **Step 10: Remove the canned-reply table**
 
 Find:
 
@@ -1270,7 +1542,7 @@ function matchDemoReply(text: string): { response: string; suggestions?: string[
 
 Replace with: *(nothing — delete this whole block)*
 
-- [ ] **Step 3: Add `useAuth` + the real `sendMessage` callback, wire the panel**
+- [ ] **Step 11: Add `useAuth` + the real `getChatReply`, wire the panel**
 
 Find:
 
@@ -1302,11 +1574,11 @@ export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
   const { currentOrganization } = useAuth();
   const orgId = currentOrganization?.id ?? 'org-001';
 
-  const sendAssistantMessage = useCallback(
-    async (history: AiChatMessage[]): Promise<string> => {
-      const res = await sendAiChatMessage(orgId, history, 'employee');
+  const getChatReply = useCallback(
+    async (text: string, history: AiChatTurn[]): Promise<{ response: string }> => {
+      const res = await sendAiChatMessage(orgId, text, history, 'employee');
       if (!res.success) throw new Error(res.error || 'Something went wrong. Try again.');
-      return res.data.reply;
+      return { response: res.data.reply };
     },
     [orgId],
   );
@@ -1324,13 +1596,13 @@ export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
         title="AI Assistant"
         subtitle="Real answers grounded in your own timesheet, expenses, and payslips — or ask anything about how to use Finance OS."
         quickPrompts={CHAT_QUICK_PROMPTS}
-        sendMessage={sendAssistantMessage}
+        getReply={getChatReply}
         placeholder="Ask about your hours, expenses, or payslips…"
         emptyStateHint="Start a conversation about your work or Finance OS itself."
       />
 ```
 
-- [ ] **Step 4: Verify the project builds**
+- [ ] **Step 12: Verify the project builds**
 
 ```bash
 pnpm run build
@@ -1338,13 +1610,14 @@ pnpm run build
 
 Expected: no errors referencing this file.
 
-- [ ] **Step 5: Smoke-check the page in the browser**
+- [ ] **Step 13: Smoke-check the page in the browser**
 
 ```bash
 pnpm run dev:full
 ```
 
-Open `/login/employee`, sign in, navigate to the AI Assistant view. Run the same crash check as Task 6 Step 9 (`Something went wrong` / `is not defined`) and confirm it renders — full functional verification (a real grounded reply) happens in Task 9.
+Open `/login/employee`, sign in, navigate to the AI Assistant view. Run the same crash check as
+Step 8 and confirm it renders — full functional verification happens in Task 8.
 
 ---
 
@@ -1354,15 +1627,23 @@ Open `/login/employee`, sign in, navigate to the AI Assistant view. Run the same
 - Delete: `src/app/components/ai-assistant/AIAssistantChat.tsx`
 - Modify: `src/app/App.tsx`
 
-**Interfaces:** none — this task only removes code, nothing downstream depends on it.
+**Interfaces:** none — this task only removes code; nothing downstream depends on it.
 
-- [ ] **Step 1: Remove the lazy import**
+- [ ] **Step 1: Remove the lazy import (keep the `Toaster` import above it — added by an unrelated prior fix — untouched)**
 
-In `src/app/App.tsx`, find:
+Find:
+
+```ts
+import { LoginPage } from './components/LoginPage';
+import { Toaster } from './components/ui/sonner';
+```
+
+Confirm this line is present unchanged (it should already be — do not modify it; it's from an
+unrelated fix). Then find:
 
 ```ts
 const KeyboardShortcuts = React.lazy(() =>
-  import('.\components\keyboard-shortcuts\KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts }))
+  import('./components/keyboard-shortcuts/KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts }))
 );
 const AIAssistantChat = React.lazy(() =>
   import('./components/ai-assistant/AIAssistantChat').then(m => ({ default: m.AIAssistantChat }))
@@ -1373,15 +1654,30 @@ Replace with:
 
 ```ts
 const KeyboardShortcuts = React.lazy(() =>
-  import('.\components\keyboard-shortcuts\KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts }))
+  import('./components/keyboard-shortcuts/KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts }))
 );
 ```
 
-- [ ] **Step 2: Remove the mount**
+- [ ] **Step 2: Remove the mount (keep the `<Toaster/>` mount above it untouched)**
 
 Find:
 
 ```tsx
+            <OnboardingProvider>
+              {/* Every toast.success/toast.error call across the app (Add Asset, Invite Member,
+                  Save Settings, Export, ...) was a silent no-op — sonner's <Toaster/> was never
+                  mounted anywhere, so the toast queue had nowhere to render. */}
+              <Toaster richColors position="top-right" />
+              <Suspense fallback={<LoadingScreen />}>
+                <SilentErrorBoundary>
+                  <MagneticCursor />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary>
+                  <OnboardingWizard />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary>
+                  <CommandPalette />
+                </SilentErrorBoundary>
                 <SilentErrorBoundary>
                   <KeyboardShortcuts />
                 </SilentErrorBoundary>
@@ -1391,17 +1687,36 @@ Find:
                 <ErrorBoundary>
                   <AppRoutes />
                 </ErrorBoundary>
+              </Suspense>
+            </OnboardingProvider>
 ```
 
 Replace with:
 
 ```tsx
+            <OnboardingProvider>
+              {/* Every toast.success/toast.error call across the app (Add Asset, Invite Member,
+                  Save Settings, Export, ...) was a silent no-op — sonner's <Toaster/> was never
+                  mounted anywhere, so the toast queue had nowhere to render. */}
+              <Toaster richColors position="top-right" />
+              <Suspense fallback={<LoadingScreen />}>
+                <SilentErrorBoundary>
+                  <MagneticCursor />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary>
+                  <OnboardingWizard />
+                </SilentErrorBoundary>
+                <SilentErrorBoundary>
+                  <CommandPalette />
+                </SilentErrorBoundary>
                 <SilentErrorBoundary>
                   <KeyboardShortcuts />
                 </SilentErrorBoundary>
                 <ErrorBoundary>
                   <AppRoutes />
                 </ErrorBoundary>
+              </Suspense>
+            </OnboardingProvider>
 ```
 
 - [ ] **Step 3: Delete the file and its now-empty folder**
@@ -1411,7 +1726,7 @@ rm "src/app/components/ai-assistant/AIAssistantChat.tsx"
 rmdir "src/app/components/ai-assistant" 2>/dev/null || true
 ```
 
-(On Windows/PowerShell, `Remove-Item "src/app/components/ai-assistant" -Recurse -Force` accomplishes the same — use whichever shell you're running.)
+(On Windows/PowerShell: `Remove-Item "src/app/components/ai-assistant" -Recurse -Force`.)
 
 - [ ] **Step 4: Verify the project builds**
 
@@ -1419,7 +1734,8 @@ rmdir "src/app/components/ai-assistant" 2>/dev/null || true
 pnpm run build
 ```
 
-Expected: no errors (no remaining references to `AIAssistantChat` anywhere — confirm with a repo-wide search for the string `AIAssistantChat` if unsure).
+Expected: no errors (no remaining references to `AIAssistantChat` anywhere — confirm with a
+repo-wide search for the string `AIAssistantChat` if unsure).
 
 - [ ] **Step 5: Smoke-check the app boots**
 
@@ -1427,7 +1743,10 @@ Expected: no errors (no remaining references to `AIAssistantChat` anywhere — c
 pnpm run dev:full
 ```
 
-Open any page (e.g. `/login/owner`, sign in). Confirm the floating chat bubble (bottom-right) no longer appears anywhere, and no console error mentions a missing module.
+Open any page (e.g. `/login/owner`, sign in). Confirm the floating chat bubble (bottom-right) no
+longer appears anywhere, that toasts still work (e.g. trigger any `toast.success` action —
+unaffected by this task, just confirming Step 1–2 didn't regress it), and no console error
+mentions a missing module.
 
 ---
 
@@ -1435,47 +1754,73 @@ Open any page (e.g. `/login/owner`, sign in). Confirm the floating chat bubble (
 
 **Files:** none — verification only.
 
-- [ ] **Step 1: Get a free Groq key and set it**
+- [ ] **Step 1: Confirm the "not configured" path (both tiers absent)**
 
-Sign up at https://console.groq.com/keys (free, no credit card), create an API key, and add it to `.env.local`:
-
-```
-GROQ_API_KEY=gsk_your_key_here
-```
-
-- [ ] **Step 2: Confirm the "not configured" path first (with the key temporarily absent)**
-
-Before adding the key (or by commenting it out), run:
+Ensure no org has `useCustomKey: true` with a saved key (fresh seed data should already satisfy
+this), and leave `GROQ_API_KEY` unset in `.env.local`. Run:
 
 ```bash
 pnpm run dev:full
 ```
 
-Sign in via `/login/owner`, open the AI Assistant "Ask" tab, send any message. Expected: the panel's error banner shows "AI Assistant isn't configured. Ask an admin to set GROQ_API_KEY." — not a crash, not a fake reply.
+Sign in via `/login/owner`, open the AI Assistant "Ask" tab, send any message. Expected: the
+panel's error banner shows "AI Assistant isn't configured. Add your own AI provider key in
+Settings → AI Assistant → Integrations, or ask an admin to set GROQ_API_KEY on the server." — not
+a crash, not a fake reply.
 
-- [ ] **Step 3: Add the real key and restart**
+- [ ] **Step 2: Groq fallback tier**
 
-Put the key from Step 1 into `.env.local`, stop and restart `pnpm run dev:full` (env vars are read at server boot).
+Get a free key at https://console.groq.com/keys (no credit card) and add it to `.env.local`:
 
-- [ ] **Step 4: Org workspace — data-grounded question**
+```
+GROQ_API_KEY=gsk_your_key_here
+```
 
-Signed in as owner, open the AI Assistant "Ask" tab, ask: *"What's my current budget status?"* Expected: a real, specific reply referencing actual budget names/amounts from the seeded org data (not generic filler, not an error).
+Restart `pnpm run dev:full` (env vars are read at server boot). With no org-level key configured,
+ask: *"What's my current budget status?"* Expected: a real, specific reply referencing actual
+seeded budget names/amounts — not generic filler, not an error.
 
-- [ ] **Step 5: Org workspace — how-to and general-knowledge questions in the same conversation**
+- [ ] **Step 3: Multi-turn memory**
 
-In the same conversation, ask: *"How do I invite a new team member?"* and then *"What's the difference between cash flow and profit?"* Expected: both answered naturally and correctly — the first referencing Finance OS's Team & Permissions feature, the second from general finance knowledge — neither refused for being "outside the data."
+In the same conversation, ask a follow-up that only makes sense with context from the previous
+answer (e.g. after asking about budget status, ask *"Which of those is closest to going over?"*).
+Expected: the reply correctly references the prior turn — confirms history is actually threaded
+end-to-end now (it previously wasn't, on either provider path).
+
+- [ ] **Step 4: How-to and general-knowledge questions in the same conversation**
+
+Still in the same conversation, ask: *"How do I invite a new team member?"* and then *"What's the
+difference between cash flow and profit?"* Expected: both answered naturally and correctly — the
+first referencing Finance OS's Team & Permissions feature, the second from general finance
+knowledge — neither refused for being "outside the data."
+
+- [ ] **Step 5: BYOK tier takes priority when configured**
+
+In the org workspace, go to Settings → AI Assistant → Integrations, enable "use your own key",
+enter a real Anthropic or OpenAI API key, and save. Ask another question in the Ask tab. Expected:
+a real reply (confirms the BYOK path still works after the route rewrite); the header's
+"Integration: ..." line shows the configured provider/model. Then clear that key again (Integrations
+→ remove/disable) so the rest of this task exercises the Groq fallback as intended.
 
 - [ ] **Step 6: Employee portal — own-data question, and isolation check**
 
-Log out, sign in via `/login/employee` (Alex Chen). Open the AI Assistant, ask: *"How many hours have I logged this week?"* Expected: a reply reflecting Alex Chen's own seeded timesheet data. Then ask something implying another employee's data (e.g. *"What's Lisa Kumar's payslip?"*) — expected: the assistant does not fabricate another employee's figures (it has no access to them server-side, so it can only decline or say it doesn't have that information).
+Log out, sign in via `/login/employee` (Alex Chen). Open the AI Assistant, ask: *"How many hours
+have I logged this week?"* Expected: a reply reflecting Alex Chen's own seeded timesheet data.
+Then ask something implying another employee's data (e.g. *"What's Lisa Kumar's payslip?"*) —
+expected: the assistant does not fabricate another employee's figures (it has no access to them
+server-side, so it can only decline or say it doesn't have that information).
 
 - [ ] **Step 7: Mock-mode honest failure**
 
-Stop `dev:full`. Run `pnpm run dev` alone (no local API server). Open the app, sign in, open either AI Assistant view, send a message. Expected: the error "AI Assistant requires the app to be running with the local API server (pnpm run dev:full)." appears immediately — no hung network request, no fake reply. Stop this server once confirmed; restart `pnpm run dev:full` if continuing to test.
+Stop `dev:full`. Run `pnpm run dev` alone (no local API server). Open the app, sign in, open either
+AI Assistant view, send a message. Expected: "AI Assistant requires the app to be running with the
+local API server (pnpm run dev:full)." appears immediately — no hung network request, no fake
+reply. Stop this server once confirmed; restart `pnpm run dev:full` if continuing to test.
 
 - [ ] **Step 8: Confirm the floating widget is gone everywhere**
 
-Click through a few different views/surfaces (org dashboard, employee dashboard, platform console if accessible) and confirm the bottom-right chat bubble never appears on any of them.
+Click through a few different views/surfaces (org dashboard, employee dashboard, platform console
+if accessible) and confirm the bottom-right chat bubble never appears on any of them.
 
 - [ ] **Step 9: Crash sweep**
 
@@ -1490,12 +1835,33 @@ Expected: `[false, false]` on both.
 
 - [ ] **Step 10: Report results**
 
-Summarize what was confirmed in Steps 2–9 (pass/fail per step). No commit needed for this task — it's verification only. If everything passes, this plan is complete; commit the whole feature only if/when the user asks.
+Summarize what was confirmed in Steps 1–9 (pass/fail per step). No commit needed for this task —
+it's verification only. If everything passes, this plan is complete; commit the whole feature only
+if/when the user asks.
 
 ---
 
 ## Self-Review Notes
 
-- **Spec coverage:** Groq provider + server-only key (Task 1, 3) · session-only history / non-streaming (Task 5's `handleSend` keeps `messages` in React state only, one request → one response, no SSE) · org context from real `store` data (Task 3 `buildOrgContext`) · employee context scoped to caller only via `req.authUser!.id` (Task 3 `buildEmployeeContext`, verified in Task 9 Step 6) · open conversational scope incl. product how-to + general knowledge (Task 3 `buildSystemPrompt`, verified in Task 9 Step 5) · mock-mode honest failure, no dataStore branch (Task 4, verified in Task 9 Step 7) · floating widget removed (Task 8) · fake dashboards removed (Task 6 Steps 4–6) · rate limiting (Task 1 Step 3). All covered.
-- **Type consistency:** `AiChatMessage` (Task 2) is the single shape used by the server route's `isChatMessage`/`messages` (Task 3), the client service's `sendAiChatMessage` signature (Task 4), `AiChatPanelProps.sendMessage` (Task 5), and both callers' `sendAssistantMessage` callbacks (Task 6, 7) — `{ role: 'user' | 'assistant'; content: string }` everywhere, no drift. `sendAiChatMessage(organizationId, messages, surface)` parameter order/types match every call site.
-- **No placeholders:** every step has literal code or an exact, unambiguous find/replace anchor; the two large-deletion steps (Task 6 Step 6, Task 7 Step 2) name exact start/end markers rather than describing "remove the fake stuff" vaguely.
+- **Spec coverage:** BYOK-first, Groq-fallback, honest-error-otherwise resolution order (Task 4,
+  verified Task 9 Steps 1–2, 5) · session-only history, now actually threaded end-to-end (Task 6,
+  verified Task 9 Step 3 — previously broken on both provider paths) · org context from real
+  `store` data (Task 4 `buildOrgContext`) · employee context scoped to caller only via
+  `req.authUser!.id` (Task 4 `buildEmployeeContext`, verified Task 9 Step 6) · open conversational
+  scope incl. product how-to + general knowledge (Task 4 `buildSystemPrompt`, verified Task 9 Step
+  4) · mock-mode honest failure, no dataStore branch (Task 5, verified Task 9 Step 7) · floating
+  widget removed (Task 8) · fake dashboards + all canned-reply fallbacks removed (Task 7 Steps
+  2–3, 5–6, 10–11) · rate limiting (Task 1 Step 3, applied in Task 4 Step 3) · reconciliation with
+  the pre-existing `83d16b9` commit without reverting its unrelated fixes (Task 8 Steps 1–2 anchor
+  around the `Toaster` addition explicitly; Global Constraints call this out). All covered.
+- **Type consistency:** `AiChatTurn` (Task 2, in `src/services/types.ts`) is the single shape used
+  by `AiProviderRequest`/`callConfiguredAiProvider`/`callGroq` (Task 3), the route's
+  `safeHistory`/`req.body` handling (Task 4), `sendAiChatMessage`'s signature (Task 5),
+  `AiChatPanelProps.getReply` (Task 6), and both callers' `getChatReply` (Task 7) —
+  `{ role: 'user' | 'assistant'; content: string }` everywhere, no drift.
+  `sendAiChatMessage(organizationId, message, history, surface)` parameter order/types match every
+  call site (Task 5 definition; Task 7 Parts A and B calls).
+- **No placeholders:** every step has literal code or an exact, unambiguous find/replace anchor;
+  every anchor was re-derived from the *current* file content (post-`83d16b9`), not the original
+  pre-existing-commit assumption — the two large-deletion steps (Task 7 Step 6, Step 10) name exact
+  start/end markers rather than describing "remove the fake stuff" vaguely.
