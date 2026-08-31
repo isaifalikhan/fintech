@@ -8,6 +8,9 @@
 import { Router, type Request, type Response } from 'express';
 import { store, type PlatformSettings, type PlatformPlan } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
+import type { User } from '../../src/services/types.js';
+import { toPublicUser, toPublicUsers } from '../lib/serialize.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
 
 interface PlatformOrgMeta {
   plan: string;
@@ -274,6 +277,71 @@ export function createPlatformRouter(): Router {
     };
     backupHistory.unshift(entry);
     ok(res, entry);
+  });
+
+  // ---- Platform staff (platform_admin / platform_manager accounts) ----
+
+  r.get('/staff', (_req: Request, res: Response) => {
+    const staff = store.users.filter(u => u.role === 'platform_admin' || u.role === 'platform_manager');
+    ok(res, toPublicUsers(staff));
+  });
+
+  r.post('/staff/invite', async (req: Request, res: Response) => {
+    const { email, name, role } = req.body as { email?: string; name?: string; role?: 'platform_admin' | 'platform_manager' };
+    const trimmedEmail = email?.trim().toLowerCase();
+    if (!trimmedEmail) return fail(res, 400, 'Email is required');
+    if (role !== 'platform_admin' && role !== 'platform_manager') {
+      return fail(res, 400, 'Role must be platform_admin or platform_manager');
+    }
+    if (req.authUser!.role === 'platform_manager' && role === 'platform_admin') {
+      return fail(res, 403, 'Managers can only invite platform managers');
+    }
+
+    let user = store.users.find(u => u.email.toLowerCase() === trimmedEmail);
+    if (user && (user.role === 'platform_admin' || user.role === 'platform_manager')) {
+      return fail(res, 409, 'Already platform staff');
+    }
+
+    if (!user) {
+      user = {
+        id: `user-${Date.now()}`,
+        email: trimmedEmail,
+        name: name?.trim() || trimmedEmail,
+        role,
+        createdAt: new Date().toISOString(),
+        platformStatus: 'pending',
+      } as User;
+      store.users.push(user);
+    } else {
+      user.role = role;
+      user.platformStatus = 'pending';
+    }
+    store.persist();
+
+    let inviteEmailSent = false;
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const sb = getSupabaseAdminClient()!;
+        const { data, error } = await sb.auth.admin.inviteUserByEmail(trimmedEmail, {
+          data: { legacy_id: user.id, name: user.name, platform_role: role },
+        });
+        if (error) {
+          console.error('[platform staff] Supabase inviteUserByEmail failed', error);
+        } else if (data.user) {
+          inviteEmailSent = true;
+        }
+      } catch (e) {
+        console.error('[platform staff] Supabase admin invite threw', e);
+      }
+    }
+
+    created(
+      res,
+      toPublicUser(user),
+      inviteEmailSent
+        ? `Invite email sent to ${trimmedEmail}`
+        : `Staff added. ${isSupabaseAdminConfigured() ? 'Invite email could not be sent — check server logs.' : 'Supabase admin invite is not configured on this server, so no email was sent.'}`,
+    );
   });
 
   return r;

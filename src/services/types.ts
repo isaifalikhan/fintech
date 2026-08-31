@@ -56,6 +56,12 @@ export interface User {
    * it once via `server/lib/seedPasswords.ts`.
    */
   passwordHash?: string;
+  /**
+   * Set when this user is platform staff (`platform_admin`/`platform_manager`) invited but not
+   * yet logged in. Undefined means active — mirrors `OrganizationMember.status`'s convention so
+   * existing seeded platform staff need no backfill.
+   */
+  platformStatus?: 'active' | 'pending';
 }
 
 export interface OrganizationMember {
