@@ -634,3 +634,10 @@ export interface OrgAiIntegrationSettings {
   /** Secret — never log; in production store server-side only */
   apiKey: string;
 }
+
+/** One turn in an AI Assistant conversation. Shared by the client chat UI/service and the
+ *  server's provider callers — previously defined twice, identically, in both places. */
+export interface AiChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}

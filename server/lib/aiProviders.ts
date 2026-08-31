@@ -8,10 +8,7 @@
  * `openai` for a single call site.
  */
 
-export interface AiChatTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import type { AiChatTurn } from '../../src/services/types.js';
 
 export interface AiProviderRequest {
   providerName: string;
