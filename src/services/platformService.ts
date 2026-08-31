@@ -14,7 +14,7 @@
 
 import { isHttpBackendConfigured, apiGet, apiPostJson, apiRequest } from '@/lib/apiClient';
 import { dataStore, generateId, simulateDelay } from './dataStore';
-import type { ServiceResponse } from './types';
+import type { ServiceResponse, User } from './types';
 
 // ── Platform Types ──────────────────────────────────────────────────────────
 
@@ -531,5 +531,67 @@ export const platformService = {
     }
     await simulateDelay();
     return { success: true, data: [...dataStore.backupHistory] };
+  },
+
+  /**
+   * List all platform staff (platform_admin + platform_manager users).
+   * When `VITE_API_BASE_URL` is set: `GET /platform/staff`.
+   */
+  async getStaff(): Promise<ServiceResponse<User[]>> {
+    if (isHttpBackendConfigured()) {
+      return apiGet<User[]>('/platform/staff');
+    }
+    await simulateDelay();
+    return {
+      success: true,
+      data: dataStore.users.filter(u => u.role === 'platform_admin' || u.role === 'platform_manager'),
+    };
+  },
+
+  /**
+   * Invite a new platform admin/manager by email — find-or-create by email, mirroring
+   * organizationService.inviteMember. This method does NOT check the caller's own role; the
+   * server enforces (authoritatively) that a platform_manager can only invite platform_manager.
+   * The mock branch below has no such check either, matching every other mock-branch method in
+   * this codebase (mock mode has no real auth boundary — see organizationService.inviteMember).
+   * When `VITE_API_BASE_URL` is set: `POST /platform/staff/invite`.
+   */
+  async inviteStaff(
+    email: string,
+    role: 'platform_admin' | 'platform_manager',
+    name?: string,
+  ): Promise<ServiceResponse<User>> {
+    if (isHttpBackendConfigured()) {
+      return apiPostJson<{ email: string; name?: string; role: 'platform_admin' | 'platform_manager' }, User>(
+        '/platform/staff/invite',
+        { email, name, role },
+      );
+    }
+    await simulateDelay(200);
+    const trimmedEmail = email.trim().toLowerCase();
+    let user = dataStore.users.find(u => u.email.toLowerCase() === trimmedEmail);
+    if (user && (user.role === 'platform_admin' || user.role === 'platform_manager')) {
+      return { success: false, data: user, error: 'Already platform staff' };
+    }
+    if (!user) {
+      user = {
+        id: generateId('user'),
+        email: trimmedEmail,
+        name: name?.trim() || trimmedEmail,
+        role,
+        createdAt: new Date().toISOString(),
+        platformStatus: 'pending',
+      };
+      dataStore.users.push(user);
+    } else {
+      user.role = role;
+      user.platformStatus = 'pending';
+    }
+    dataStore.notify('users');
+    return {
+      success: true,
+      data: user,
+      message: 'Staff added (no HTTP backend configured, so no invite email was sent)',
+    };
   },
 };
