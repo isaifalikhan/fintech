@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Plus, Trash2, Wallet, FileText, X } from 'lucide-react';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { employeeService } from '@/services/employeeService';
+import { organizationService } from '@/services/organizationService';
 import { accountService } from '@/services/accountService';
 import { useServiceArray, useMutation } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,10 +26,17 @@ export function PayrollView({ orgId: orgIdProp }: PayrollViewProps) {
   const orgId = orgIdProp ?? currentOrganization?.id ?? '';
   const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
-  const { data: members, loading: membersLoading } = useServiceArray(
-    () => employeeService.getTeamDirectory(orgId),
+  // The "team directory" collection (`getTeamDirectory`) is a decorative, seed-only list that's
+  // never populated when a real employee is invited — it left every real org's payslip dropdown
+  // empty. Org membership (`getMembers`) is the real, always-populated source of who's in the org.
+  const { data: orgMembers, loading: membersLoading } = useServiceArray(
+    () => organizationService.getMembers(orgId),
     [orgId],
-    ['teamMembers'],
+    ['organizationMembers'],
+  );
+  const members = useMemo(
+    () => orgMembers.filter(m => m.status !== 'pending').map(m => ({ id: m.userId, name: m.user.name })),
+    [orgMembers],
   );
   const { data: accounts } = useServiceArray(
     () => accountService.getBankAccounts(orgId),

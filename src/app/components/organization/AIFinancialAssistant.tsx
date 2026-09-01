@@ -1,12 +1,14 @@
 import { motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
-import { fetchOrgAiSettings, sendOrgAiChatMessage } from '@/services/aiSettingsService';
+import { fetchOrgAiSettings } from '@/services/aiSettingsService';
+import { sendAiChatMessage } from '@/services/aiAssistantService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
+import { isHttpBackendConfigured } from '@/lib/apiClient';
 import type { OrgAiIntegrationSettings } from '@/services/types';
-import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
+import { AiChatPanel, type AiChatPanelHandle } from '@/app/components/shared/AiChatPanel';
 import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import {
@@ -127,6 +129,12 @@ export function AIFinancialAssistant() {
   const [activeTab, setActiveTab] = useState<AIPortalTab>('ask');
   const [commandInput, setCommandInput] = useState('');
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
+  const chatPanelRef = useRef<AiChatPanelHandle>(null);
+
+  const takeAction = (recommendation: string) => {
+    setActiveTab('ask');
+    chatPanelRef.current?.sendMessage(`Help me act on this recommendation: ${recommendation}`);
+  };
 
   useEffect(() => {
     const sync = () => {
@@ -142,13 +150,16 @@ export function AIFinancialAssistant() {
 
   const hasLiveAiProvider = !!(aiSettings?.useCustomKey && aiSettings.apiKey.trim());
 
-  /** Tries the org's configured provider (server-side proxy) first; falls back to the local
-   *  demo reply on any failure — missing/invalid key, provider outage, or mock/Supabase mode
-   *  where there's no server to proxy through. Never throws: the fallback IS the error handling. */
+  /** In local-HTTP mode, always sends to the real `/ai-chat` route — it resolves to the org's own
+   *  configured provider key if set, otherwise the server's built-in Groq fallback, so a reply is
+   *  "live" either way; a genuine failure (bad key, provider outage, nothing configured at all) is
+   *  surfaced as an honest error rather than silently swapped for a canned reply. Mock/Supabase mode
+   *  has no server to proxy through, so it keeps using the local demo replies. */
   const getChatReply = async (text: string): Promise<{ response: string; suggestions?: string[] }> => {
-    if (hasLiveAiProvider) {
-      const res = await sendOrgAiChatMessage(orgId, text, []);
+    if (isHttpBackendConfigured()) {
+      const res = await sendAiChatMessage(orgId, text, [], 'org');
       if (res.success) return { response: res.data.reply };
+      throw new Error(res.error || 'Assistant is unavailable right now. Try again in a moment.');
     }
     return matchDemoReply(text);
   };
@@ -459,11 +470,14 @@ export function AIFinancialAssistant() {
       <>
       {/* ORG-P04: chat panel — send path + empty state + errors in UI */}
       <AiChatPanel
+        ref={chatPanelRef}
         title="Ask the assistant"
         subtitle={
-          hasLiveAiProvider
-            ? `Connected to ${aiSettings?.providerName.trim() || 'your configured provider'} — replies come from the org's live AI connection (Integrations).`
-            : 'Demo replies for now — type a question or use a quick prompt. Connect a provider under AI Assistant → Integrations for live answers.'
+          isHttpBackendConfigured()
+            ? hasLiveAiProvider
+              ? `Connected to ${aiSettings?.providerName.trim() || 'your configured provider'} — replies come from the org's live AI connection (Integrations).`
+              : 'Live replies from the built-in assistant. Connect your own provider under AI Assistant → Integrations to use a custom model.'
+            : "Demo replies for now — the local API server isn't running, so there's no backend to send live messages to."
         }
         quickPrompts={CHAT_QUICK_PROMPTS}
         getReply={getChatReply}
@@ -836,9 +850,22 @@ export function AIFinancialAssistant() {
                 {insight.actionable && (
                   <button
                     type="button"
-                    disabled
-                    title="Connect a live AI provider under AI Assistant → Integrations to enable actions on insights"
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-white/50 ml-4 cursor-not-allowed opacity-50"
+                    disabled={!hasLiveAiProvider}
+                    title={
+                      hasLiveAiProvider
+                        ? undefined
+                        : 'Connect a live AI provider under AI Assistant → Integrations to enable actions on insights'
+                    }
+                    onClick={
+                      hasLiveAiProvider
+                        ? () => takeAction(insight.recommendation ?? insight.description)
+                        : undefined
+                    }
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ml-4 ${
+                      hasLiveAiProvider
+                        ? 'text-white hover:opacity-90 transition-opacity'
+                        : 'text-white/50 cursor-not-allowed opacity-50'
+                    }`}
                     style={{
                       background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3))',
                       border: '1px solid rgba(168, 85, 247, 0.5)',

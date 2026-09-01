@@ -116,6 +116,11 @@ export function OrganizationDashboard() {
     error: txnError,
     refetch: refetchTxns,
   } = useService(() => svc.transactions.getAll({ pageSize: 20 }), [svc.orgId]);
+  const { data: expenseBreakdown } = useServiceArray(
+    () => svc.reports.getExpenseBreakdown(),
+    [svc.orgId],
+    ['transactions'],
+  );
   const { data: deptProfitability } = useServiceArray(
     () => svc.departments.getProfitability(),
     [svc.orgId],
@@ -128,16 +133,22 @@ export function OrganizationDashboard() {
     void refetchTxns();
   };
 
-  const sumAccountsPkr = bankAccounts.reduce((sum, acc) => {
-    const b = safeFinite(acc.balance, 0);
-    if (acc.currency === 'PKR') return sum + b;
-    if (acc.currency === 'USD') return sum + b * 280;
-    return sum + b;
-  }, 0);
+  // Same rule as `reportService.getDashboardSummary`: there is no FX-conversion capability
+  // anywhere in this app, so summing every account regardless of its own currency and labeling
+  // the total with the org's currency silently mixed currencies together (e.g. a USD-org total
+  // that didn't move when an AED account changed, or that overstated the true USD total by
+  // adding raw AED balances into it). Only sum accounts actually held in the org's own currency —
+  // this is why the total now changes when the org's currency setting changes.
+  const accountsInOrgCurrency = bankAccounts.filter(acc => acc.currency === orgCurrency);
+  const sumAccountsInOrgCurrency = accountsInOrgCurrency.reduce(
+    (sum, acc) => sum + safeFinite(acc.balance, 0),
+    0,
+  );
+  const otherCurrencyAccountCount = bankAccounts.length - accountsInOrgCurrency.length;
 
   const totalBalance =
     bankAccounts.length > 0
-      ? safeFinite(sumAccountsPkr, dashboardFallbackAnalytics.netWorth)
+      ? safeFinite(sumAccountsInOrgCurrency, dashboardFallbackAnalytics.netWorth)
       : dashboardFallbackAnalytics.netWorth;
 
   const cashInHand = safeFinite(kpis?.cashOnHand, dashboardFallbackAnalytics.cashInHand);
@@ -238,14 +249,15 @@ export function OrganizationDashboard() {
     [deptProfitability],
   );
 
-  // Expense category data for donut chart
-  const expenseCategoryData = [
-    { name: 'Salaries', value: 1500000, color: MODERN_COLORS.primary },
-    { name: 'Operations', value: 800000, color: MODERN_COLORS.secondary },
-    { name: 'Marketing', value: 500000, color: MODERN_COLORS.info },
-    { name: 'Technology', value: 400000, color: MODERN_COLORS.success },
-    { name: 'Other', value: 300000, color: MODERN_COLORS.warning },
-  ];
+  // Expense category data for donut chart — real spend by category, refetches whenever
+  // 'transactions' changes so a newly added expense shows up here immediately.
+  const expenseCategoryData = useMemo(
+    () =>
+      (expenseBreakdown ?? [])
+        .filter((row) => row.amount > 0)
+        .map((row) => ({ name: row.categoryName, value: row.amount, color: row.color })),
+    [expenseBreakdown],
+  );
 
   const monthlyComparisonData = useMemo(
     () =>
@@ -378,6 +390,11 @@ export function OrganizationDashboard() {
                 value={totalBalance}
                 currency={orgCurrency}
                 delay={0}
+                note={
+                  otherCurrencyAccountCount > 0
+                    ? `Excludes ${otherCurrencyAccountCount} account${otherCurrencyAccountCount === 1 ? '' : 's'} in other currencies — no FX conversion yet`
+                    : undefined
+                }
               />
 
               <ModernKPICard
@@ -695,12 +712,24 @@ export function OrganizationDashboard() {
                 iconColor="pink"
                 delay={0.6}
               >
-                <DonutChart
-                  data={expenseCategoryData}
-                  height={280}
-                  innerRadius={70}
-                  outerRadius={100}
-                />
+                {expenseCategoryData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center gap-2 px-4" style={{ height: 280 }}>
+                    <PieChartIcon className="size-8 text-slate-500" />
+                    <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                      No expenses yet
+                    </p>
+                    <p className="text-xs text-slate-500 max-w-xs">
+                      Categorized expense transactions will show up here as spending by category.
+                    </p>
+                  </div>
+                ) : (
+                  <DonutChart
+                    data={expenseCategoryData}
+                    height={280}
+                    innerRadius={70}
+                    outerRadius={100}
+                  />
+                )}
               </ChartContainer>
             </div>
 

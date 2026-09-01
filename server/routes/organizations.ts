@@ -8,6 +8,7 @@ import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User, 
 import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
 import { requireOrgRole } from '../middleware/auth.js';
+import { toPublicUser } from '../lib/serialize.js';
 import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
 import { callConfiguredAiProvider, callGroq } from '../lib/aiProviders.js';
 import { buildOrgContext, buildEmployeeContext, buildSystemPrompt } from '../lib/aiContext.js';
@@ -58,7 +59,7 @@ export function createOrganizationRouter(): Router {
       .filter(m => m.organizationId === orgId)
       .map(m => {
         const user = store.users.find(u => u.id === m.userId);
-        return user ? { ...m, user } : null;
+        return user ? { ...m, user: toPublicUser(user) } : null;
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
     ok(res, members);
