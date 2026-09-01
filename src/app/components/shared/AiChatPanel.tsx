@@ -58,13 +58,8 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
   quickPrompts,
   getReply,
   placeholder = 'Ask a question…',
-<<<<<<< HEAD
-  emptyStateHint = 'Start a conversation. Answers below are sample data until this is connected to a live backend.',
-}, ref) {
-=======
   emptyStateHint = 'Start a conversation.',
-}: AiChatPanelProps) {
->>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
+}, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -110,11 +105,7 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
     setSending(true);
 
     try {
-<<<<<<< HEAD
-      const { response, suggestions } = await getReply(raw);
-=======
       const { response, suggestions } = await getReply(raw, historyBeforeThisMessage);
->>>>>>> worktree-ai-assistant-groq-v2
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
