@@ -259,15 +259,12 @@ export function OrganizationDashboard() {
     [expenseBreakdown],
   );
 
+  // Same real cash-flow series as "Revenue & Profit Analysis" above — this used to be a
+  // fabricated formula unrelated to any real data, which is why the two charts disagreed
+  // (QA: "Monthly revenue differs between Revenue & Profit Analysis and Monthly Comparison").
   const monthlyComparisonData = useMemo(
-    () =>
-      ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((name, i) => ({
-        name,
-        Revenue: 2000000 + ((i * 137167) % 500000),
-        Expenses: 1200000 + ((i * 211093) % 300000),
-        Profit: 800000 + ((i * 97049) % 200000),
-      })),
-    [],
+    () => profitDataFull.slice(Math.max(0, profitDataFull.length - 6)),
+    [profitDataFull],
   );
 
   return (
@@ -742,17 +739,29 @@ export function OrganizationDashboard() {
               iconColor="green"
               delay={0.7}
             >
-              <ComboChart
-                data={monthlyComparisonData}
-                barKeys={[
-                  { key: 'Revenue', color: MODERN_COLORS.success, name: 'Revenue' },
-                  { key: 'Expenses', color: MODERN_COLORS.danger, name: 'Expenses' },
-                ]}
-                lineKeys={[
-                  { key: 'Profit', color: MODERN_COLORS.primary, name: 'Profit' },
-                ]}
-                height={300}
-              />
+              {monthlyComparisonData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center gap-2 px-4" style={{ height: 300 }}>
+                  <BarChart3 className="size-8 text-slate-500" />
+                  <p className={theme === 'dark' ? 'text-slate-300 font-medium' : 'text-slate-700 font-medium'}>
+                    No transactions yet
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-xs">
+                    Add or import transactions and monthly revenue vs. expenses will appear here.
+                  </p>
+                </div>
+              ) : (
+                <ComboChart
+                  data={monthlyComparisonData}
+                  barKeys={[
+                    { key: 'Revenue', color: MODERN_COLORS.success, name: 'Revenue' },
+                    { key: 'Expenses', color: MODERN_COLORS.danger, name: 'Expenses' },
+                  ]}
+                  lineKeys={[
+                    { key: 'Profit', color: MODERN_COLORS.primary, name: 'Profit' },
+                  ]}
+                  height={300}
+                />
+              )}
             </ChartContainer>
 
             {/* Account Balances - UNIFIED BLUE THEME */}
