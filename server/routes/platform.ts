@@ -302,6 +302,7 @@ export function createPlatformRouter(): Router {
       return fail(res, 409, 'Already platform staff');
     }
 
+    const wasExistingUser = !!user;
     if (!user) {
       user = {
         id: `user-${Date.now()}`,
@@ -335,12 +336,15 @@ export function createPlatformRouter(): Router {
       }
     }
 
+    const roleLabel = role === 'platform_admin' ? 'Platform Admin' : 'Platform Manager';
     created(
       res,
       toPublicUser(user),
-      inviteEmailSent
-        ? `Invite email sent to ${trimmedEmail}`
-        : `Staff added. ${isSupabaseAdminConfigured() ? 'Invite email could not be sent — check server logs.' : 'Supabase admin invite is not configured on this server, so no email was sent.'}`,
+      wasExistingUser
+        ? `Converted existing account ${trimmedEmail} to ${roleLabel}.`
+        : inviteEmailSent
+          ? `Invite email sent to ${trimmedEmail}`
+          : `Staff added. ${isSupabaseAdminConfigured() ? 'Invite email could not be sent — check server logs.' : 'Supabase admin invite is not configured on this server, so no email was sent.'}`,
     );
   });
 

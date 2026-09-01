@@ -147,6 +147,10 @@ export function createApiV1Router(): Router {
       membership.status = 'active';
       store.persist();
     }
+    if (user.platformStatus === 'pending') {
+      user.platformStatus = 'active';
+      store.persist();
+    }
 
     const session = createSessionForUser(req, user, org);
     const token = signAuthToken({ sub: user.id, sid: session.id });

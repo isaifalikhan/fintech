@@ -573,6 +573,7 @@ export const platformService = {
     if (user && (user.role === 'platform_admin' || user.role === 'platform_manager')) {
       return { success: false, data: user, error: 'Already platform staff' };
     }
+    const wasExistingUser = !!user;
     if (!user) {
       user = {
         id: generateId('user'),
@@ -588,10 +589,13 @@ export const platformService = {
       user.platformStatus = 'pending';
     }
     dataStore.notify('users');
+    const roleLabel = role === 'platform_admin' ? 'Platform Admin' : 'Platform Manager';
     return {
       success: true,
       data: user,
-      message: 'Staff added (no HTTP backend configured, so no invite email was sent)',
+      message: wasExistingUser
+        ? `Converted existing account ${trimmedEmail} to ${roleLabel}.`
+        : 'Staff added (no HTTP backend configured, so no invite email was sent)',
     };
   },
 };

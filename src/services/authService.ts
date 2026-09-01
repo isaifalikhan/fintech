@@ -73,6 +73,10 @@ export const authService = {
         return { success: false, data: null as unknown as AuthSession, error: 'Workspace not found' };
       }
       if (isPlatform) {
+        if (user.platformStatus === 'pending') {
+          user.platformStatus = 'active';
+          dataStore.notify('users');
+        }
         return {
           success: true,
           data: {
@@ -116,6 +120,10 @@ export const authService = {
     if (membership?.status === 'pending') {
       membership.status = 'active';
       dataStore.notify('organizationMembers');
+    }
+    if (user.platformStatus === 'pending') {
+      user.platformStatus = 'active';
+      dataStore.notify('users');
     }
     const org = membership
       ? dataStore.organizations.find(o => o.id === membership.organizationId) || null

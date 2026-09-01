@@ -4,7 +4,7 @@ import { AXIOM } from '../../../styles/axiom-tokens';
 import { platformService } from '@/services/platformService';
 import { useServiceArray } from '@/hooks/useService';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Shield, Loader2 } from 'lucide-react';
+import { Plus, Shield, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function PlatformTeamView() {
@@ -17,7 +17,7 @@ export function PlatformTeamView() {
 
   const canInviteAdmin = currentUser?.role === 'platform_admin';
 
-  const { data: staff, loading, refetch } = useServiceArray(
+  const { data: staff, loading, error, refetch } = useServiceArray(
     () => platformService.getStaff(),
     [],
     ['users'],
@@ -142,6 +142,28 @@ export function PlatformTeamView() {
       >
         {loading ? (
           <div className="p-8 text-center text-slate-400 font-mono">Loading platform staff…</div>
+        ) : error ? (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 m-6 px-4 py-3 rounded-xl text-sm"
+            style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#fecaca',
+            }}
+          >
+            <span className="flex items-center gap-2">
+              <AlertCircle className="size-4 shrink-0" />
+              {error}
+            </span>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium"
+              style={AXIOM.buttons.outline}
+            >
+              Retry
+            </button>
+          </div>
         ) : staff.length === 0 ? (
           <div className="p-8 text-center text-slate-400 font-mono">No platform staff found.</div>
         ) : (
