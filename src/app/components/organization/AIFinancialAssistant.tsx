@@ -91,7 +91,7 @@ export function AIFinancialAssistant() {
     [orgId],
   );
 
-  // ── Task 2: real, computed insights (Ask tab's KPI/insights below stay demo — out of scope) ──
+  // ── Task 2: real, computed insights ──
   const { data: txnResult } = useService(
     () => svc.transactions.getAll({ pageSize: 500 }),
     [svc.orgId],

@@ -53,7 +53,7 @@ export function AiChatPanel({
   quickPrompts,
   getReply,
   placeholder = 'Ask a question…',
-  emptyStateHint = 'Start a conversation. Answers below are sample data until this is connected to a live backend.',
+  emptyStateHint = 'Start a conversation.',
 }: AiChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -244,7 +244,7 @@ export function AiChatPanel({
           >
             <span className={input.length > CHAT_SOFT_WARN ? 'text-amber-200/85' : 'text-slate-600'}>
               {input.length > CHAT_SOFT_WARN
-                ? 'Long messages may feel slower in the demo. Consider shortening.'
+                ? 'Long messages may take a moment to process. Consider shortening.'
                 : ' '}
             </span>
             <span
