@@ -12,8 +12,9 @@ import {
   Calculator, 
   FileText, 
   CreditCard, 
-  Users, 
-  Settings, 
+  Users,
+  DollarSign,
+  Settings,
   LogOut,
   Building2,
   Sparkles,
@@ -45,9 +46,10 @@ interface OrganizationLayoutProps {
 }
 
 export function OrganizationLayout({ children, currentView, onViewChange }: OrganizationLayoutProps) {
-  const { user, logout, currentOrganization } = useAuth();
+  const { user, userRole, logout, currentOrganization } = useAuth();
   const { theme } = useTheme();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const canManagePayroll = userRole === 'owner' || userRole === 'admin';
 
   const closeMobileNav = () => setMobileNavOpen(false);
   const selectView = (view: OrgView) => {
@@ -58,11 +60,11 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
   // Use the live org from AuthContext instead of static mock data
   const organization = currentOrganization;
 
-  const navItems: { id: OrgView; label: string; icon: any }[] = [
+  const allNavItems: { id: OrgView; label: string; icon: any }[] = [
     { id: 'finance-os', label: 'Finance OS', icon: Cpu },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'profit-intelligence', label: 'Profit Intelligence', icon: LineChart },
-    { id: 'ai-assistant', label: 'AI Assistant', icon: Brain },
+    { id: 'ai-assistant', label: 'AI Portal', icon: Brain },
     { id: 'quick-add', label: 'Quick Add', icon: Plus },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'recurring', label: 'Recurring', icon: Repeat },
@@ -81,8 +83,12 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'loans', label: 'Loans & Liabilities', icon: Building2 },
     { id: 'team', label: 'Team & Permissions', icon: Users },
+    { id: 'payroll', label: 'Payroll', icon: DollarSign },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  // Payroll is owner/admin only — a viewer or employee shouldn't even see it in the sidebar.
+  const navItems = allNavItems.filter(item => item.id !== 'payroll' || canManagePayroll);
 
   return (
     <div className={`size-full flex flex-col ${theme === 'dark' ? 'bg-black' : 'bg-gradient-to-br from-slate-50 to-slate-100'} relative overflow-hidden`}>
@@ -96,7 +102,7 @@ export function OrganizationLayout({ children, currentView, onViewChange }: Orga
       }}></div>
 
       {/* Top Header Bar */}
-      <div className={`min-h-16 sm:min-h-20 ${theme === 'dark' ? 'bg-slate-900/80' : 'bg-white/80'} backdrop-blur-xl border-b ${theme === 'dark' ? 'border-cyan-500/30' : 'border-cyan-400/30'} flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-30`}>
+      <div className={`min-h-16 sm:min-h-20 ${theme === 'dark' ? 'bg-slate-900/80' : 'bg-white/80'} backdrop-blur-xl border-b ${theme === 'dark' ? 'border-cyan-500/30' : 'border-cyan-400/30'} flex flex-wrap items-center justify-between gap-y-2 gap-x-2 px-3 sm:px-5 lg:px-8 py-2 sm:py-0 shrink-0 relative z-[60]`}>
         {/* Glowing Top Border */}
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent"></div>
 

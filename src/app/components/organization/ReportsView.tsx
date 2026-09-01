@@ -100,45 +100,6 @@ const cashFlowData = {
   }
 };
 
-const departmentData = [
-  { 
-    name: 'Development', 
-    revenue: 1200000, 
-    cost: 800000, 
-    profit: 400000,
-    margin: 33.3,
-    headcount: 8,
-    avgRate: 3500
-  },
-  { 
-    name: 'Design', 
-    revenue: 800000, 
-    cost: 500000, 
-    profit: 300000,
-    margin: 37.5,
-    headcount: 5,
-    avgRate: 3200
-  },
-  { 
-    name: 'Marketing', 
-    revenue: 600000, 
-    cost: 450000, 
-    profit: 150000,
-    margin: 25,
-    headcount: 4,
-    avgRate: 2800
-  },
-  { 
-    name: 'Consulting', 
-    revenue: 450000, 
-    cost: 250000, 
-    profit: 200000,
-    margin: 44.4,
-    headcount: 3,
-    avgRate: 4500
-  }
-];
-
 const monthlyTrendData = [
   { month: 'Aug', revenue: 2200000, expenses: 1600000, profit: 600000 },
   { month: 'Sep', revenue: 2500000, expenses: 1700000, profit: 800000 },
@@ -263,28 +224,16 @@ export function ReportsView() {
   const financingCashFlow = Object.values(cashFlowData.financing).reduce((sum, val) => sum + val, 0);
   const netCashFlow = operatingCashFlow + investingCashFlow + financingCashFlow;
 
-  const departmentRows =
-    deptProfit && deptProfit.length > 0
-      ? deptProfit.map((d) => ({
-          key: d.departmentId,
-          name: d.departmentName,
-          revenue: d.revenue,
-          cost: d.directCosts,
-          profit: d.netProfit,
-          margin: d.profitMargin,
-          headcount: d.headcount,
-          avgRate: d.revenuePerHead,
-        }))
-      : departmentData.map((d) => ({
-          key: d.name,
-          name: d.name,
-          revenue: d.revenue,
-          cost: d.cost,
-          profit: d.profit,
-          margin: d.margin,
-          headcount: d.headcount,
-          avgRate: d.avgRate,
-        }));
+  const departmentRows = (deptProfit ?? []).map((d) => ({
+    key: d.departmentId,
+    name: d.departmentName,
+    revenue: d.revenue,
+    cost: d.directCosts,
+    profit: d.netProfit,
+    margin: d.profitMargin,
+    headcount: d.headcount,
+    avgRate: d.revenuePerHead,
+  }));
 
   const totalDeptRevenue = departmentRows.reduce((sum, d) => sum + d.revenue, 0);
   const totalDeptCost = departmentRows.reduce((sum, d) => sum + d.cost, 0);
@@ -1543,7 +1492,7 @@ export function ReportsView() {
                 <p className="text-sm text-slate-400 mt-1">
                   {deptProfit && deptProfit.length > 0
                     ? 'From your organization data'
-                    : 'Performance breakdown by department (sample rows when no department data yet)'}
+                    : 'Performance breakdown by department'}
                 </p>
               </div>
               <motion.button
@@ -1556,23 +1505,9 @@ export function ReportsView() {
                       ? departmentsToCsv(deptProfit)
                       : rowsToCsv([
                           [
-                            'Department',
-                            'Revenue',
-                            'Cost',
-                            'Profit',
-                            'Margin %',
-                            'Headcount',
-                            'Avg rate',
+                            'Note',
+                            'No departments configured yet — add departments under Settings, then assign them to transactions to see department-level P&L here.',
                           ],
-                          ...departmentRows.map((d) => [
-                            d.name,
-                            d.revenue,
-                            d.cost,
-                            d.profit,
-                            Math.round(d.margin * 10) / 10,
-                            d.headcount,
-                            d.avgRate,
-                          ]),
                         ])
                   )
                 }
@@ -1606,7 +1541,14 @@ export function ReportsView() {
               </div>
             )}
 
-            {!deptLoading && !deptError && (
+            {!deptLoading && !deptError && departmentRows.length === 0 && (
+              <p className="text-slate-400 text-sm text-center py-8">
+                No departments configured yet — add departments under Settings, then assign them to
+                transactions to see department-level P&amp;L here.
+              </p>
+            )}
+
+            {!deptLoading && !deptError && departmentRows.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -1714,15 +1656,18 @@ export function ReportsView() {
             style={AXIOM.containers.chartAmber}
           >
             <h4 className="text-lg font-bold text-white mb-4">Department Revenue vs Profit</h4>
+            {departmentChartRows.length === 0 ? (
+              <p className="text-slate-400 text-sm py-8 text-center">Nothing to chart for departments yet.</p>
+            ) : (
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={departmentChartRows}>
                 <CartesianGrid {...AXIOM.charts.grid} />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   {...AXIOM.charts.axis}
                   tick={{ fill: '#94a3b8' }}
                 />
-                <YAxis 
+                <YAxis
                   {...AXIOM.charts.axis}
                   tick={{ fill: '#94a3b8' }}
                   tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
@@ -1742,6 +1687,7 @@ export function ReportsView() {
                 <Bar dataKey="profit" fill={COLORS.amber} name="Profit" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </motion.div>
         </div>
       )}

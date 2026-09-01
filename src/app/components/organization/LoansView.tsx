@@ -5,6 +5,7 @@ import { BarChart, Bar, PieChart as RePieChart, Pie, Cell, XAxis, YAxis, Cartesi
 import { toast } from 'sonner';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import { formatCurrency, formatDate } from '@/lib/formatters';
+import { exportLoans } from '@/lib/exportUtils';
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useServiceArray, useMutation } from '@/hooks/useService';
 import type { Loan, LoanRecordStatus } from '@/services/types';
@@ -202,6 +203,24 @@ export function LoansView() {
     return matchesSearch && matchesFilter;
   });
 
+  const loansToExport = useMemo(() => {
+    const matchesSearchAndFilter = (loan: Loan) => {
+      const matchesSearch = loan.party.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           loan.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter = filterStatus === 'all' || loan.status === filterStatus;
+      return matchesSearch && matchesFilter;
+    };
+    if (activeView === 'to-receive') return loansToReceive.filter(matchesSearchAndFilter);
+    if (activeView === 'to-pay') return loansToPay.filter(matchesSearchAndFilter);
+    return filteredLoans;
+  }, [activeView, loansToReceive, loansToPay, filteredLoans, searchQuery, filterStatus]);
+
+  const handleExport = () => {
+    const result = exportLoans(loansToExport, { filename: 'loans-liabilities' });
+    if (result.success) toast.success(result.message);
+    else toast.error(result.message);
+  };
+
   const viewButtons = [
     { id: 'overview' as const, label: 'Overview', icon: Landmark },
     { id: 'to-receive' as const, label: 'Receivables', icon: TrendingUp },
@@ -235,7 +254,7 @@ export function LoansView() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => toast.success('Export downloaded')}
+              onClick={handleExport}
               className="px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
               style={AXIOM.buttons.secondary}
             >

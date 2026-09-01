@@ -9,9 +9,14 @@ interface ModernKPICardProps {
   label: string;
   value: number;
   currency?: string;
-  percentage: string;
-  trend: 'up' | 'down';
+  /** Omit both when there's no real period-over-period figure to back a trend badge — an absent
+   *  badge is honest; a fabricated percentage is not. */
+  percentage?: string;
+  trend?: 'up' | 'down';
   delay?: number;
+  /** Optional caption under the currency badge — e.g. a disclaimer that the figure excludes
+   *  transactions in other currencies (this app has no FX conversion). */
+  note?: string;
 }
 
 export function ModernKPICard({
@@ -22,6 +27,7 @@ export function ModernKPICard({
   percentage,
   trend,
   delay = 0,
+  note,
 }: ModernKPICardProps) {
   const { theme } = useTheme();
 
@@ -78,23 +84,25 @@ export function ModernKPICard({
               <Icon className="w-5 h-5 text-white" />
             </div>
             
-            <div 
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-              style={{
-                background: trend === 'up' 
-                  ? 'rgba(16, 185, 129, 0.15)'
-                  : 'rgba(239, 68, 68, 0.15)',
-                color: trend === 'up' ? '#10b981' : '#ef4444',
-                border: `1px solid ${trend === 'up' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-              }}
-            >
-              {trend === 'up' ? (
-                <TrendingUp className="w-3.5 h-3.5" />
-              ) : (
-                <TrendingDown className="w-3.5 h-3.5" />
-              )}
-              {percentage}
-            </div>
+            {percentage && trend && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{
+                  background: trend === 'up'
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : 'rgba(239, 68, 68, 0.15)',
+                  color: trend === 'up' ? '#10b981' : '#ef4444',
+                  border: `1px solid ${trend === 'up' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                }}
+              >
+                {trend === 'up' ? (
+                  <TrendingUp className="w-3.5 h-3.5" />
+                ) : (
+                  <TrendingDown className="w-3.5 h-3.5" />
+                )}
+                {percentage}
+              </div>
+            )}
           </div>
 
           {/* Label */}
@@ -131,6 +139,15 @@ export function ModernKPICard({
               {currency}
             </span>
           </div>
+
+          {note && (
+            <p
+              className="mt-2 text-xs leading-snug"
+              style={{ color: theme === 'dark' ? '#94a3b8' : '#64748b' }}
+            >
+              {note}
+            </p>
+          )}
         </div>
 
         {/* Bottom glow on hover */}

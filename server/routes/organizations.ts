@@ -4,11 +4,15 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User } from '../../src/services/types.js';
+import type { Organization, OrganizationMember, OrgAiIntegrationSettings, User, AiChatTurn } from '../../src/services/types.js';
 import { store } from '../lib/store.js';
 import { ok, created, fail, notFound } from '../lib/http.js';
 import { requireOrgRole } from '../middleware/auth.js';
 import { findAuthUserIdByLegacyId, getSupabaseAdminClient, isSupabaseAdminConfigured } from '../lib/supabaseAdmin.js';
+import { callConfiguredAiProvider, callGroq } from '../lib/aiProviders.js';
+import { buildOrgContext, buildEmployeeContext, buildSystemPrompt } from '../lib/aiContext.js';
+import { env } from '../config/env.js';
+import { aiAssistantRateLimiter } from '../middleware/rateLimit.js';
 
 function defaultAiSettings(): OrgAiIntegrationSettings {
   return { useCustomKey: false, providerName: '', modelName: 'gpt-4o-mini', apiKey: '' };
@@ -65,7 +69,7 @@ export function createOrganizationRouter(): Router {
     const { userId, role } = req.body as { userId: string; role: OrganizationMember['role'] };
     const existing = store.organizationMembers.find(m => m.userId === userId && m.organizationId === orgId);
     if (existing) return fail(res, 409, 'User is already a member');
-    const member: OrganizationMember = { userId, organizationId: orgId, role, joinedAt: new Date().toISOString() };
+    const member: OrganizationMember = { userId, organizationId: orgId, role, joinedAt: new Date().toISOString(), status: 'active' };
     store.organizationMembers.push(member);
     store.persist();
     created(res, member, 'Member added');
@@ -124,7 +128,7 @@ export function createOrganizationRouter(): Router {
     const existing = store.organizationMembers.find(m => m.userId === user!.id && m.organizationId === orgId);
     if (existing) return fail(res, 409, 'That person is already a member of this organization');
 
-    const member: OrganizationMember = { userId: user.id, organizationId: orgId, role, joinedAt: new Date().toISOString() };
+    const member: OrganizationMember = { userId: user.id, organizationId: orgId, role, joinedAt: new Date().toISOString(), status: 'pending' };
     store.organizationMembers.push(member);
     store.persist();
 
@@ -193,6 +197,70 @@ export function createOrganizationRouter(): Router {
     store.aiSettings = { ...store.aiSettings, [orgId]: next };
     store.persist();
     ok(res, next, 'AI connection settings saved.');
+  });
+
+  /**
+   * Real chat completion, grounded in this organization's/employee's own data. Resolution order:
+   * (1) the org's own configured provider key (`ai-settings` above) if set, (2) the server's free
+   * Groq key (GROQ_API_KEY) as a zero-config fallback, (3) a clear "not configured" error if
+   * neither is available. No silent fallback to canned replies — an honest error either way.
+   */
+  r.post('/ai-chat', aiAssistantRateLimiter, async (req: Request, res: Response) => {
+    const orgId = req.params.organizationId;
+    const userId = req.authUser!.id;
+
+    const { message, history, surface } = req.body as {
+      message?: unknown;
+      history?: unknown;
+      surface?: unknown;
+    };
+    if (typeof message !== 'string' || !message.trim()) {
+      return fail(res, 400, 'message is required');
+    }
+    if (surface !== 'org' && surface !== 'employee') {
+      return fail(res, 400, 'surface must be "org" or "employee"');
+    }
+    const safeHistory: AiChatTurn[] = Array.isArray(history)
+      ? history.filter(
+          (h): h is AiChatTurn =>
+            h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string',
+        )
+      : [];
+
+    const settings = store.aiSettings[orgId];
+    const context =
+      surface === 'org' ? buildOrgContext(orgId) : buildEmployeeContext(orgId, userId);
+    const systemPrompt = buildSystemPrompt(surface, context);
+
+    let result;
+    if (settings?.useCustomKey && settings.apiKey.trim()) {
+      result = await callConfiguredAiProvider({
+        providerName: settings.providerName,
+        modelName: settings.modelName,
+        apiKey: settings.apiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else if (env.groqApiKey) {
+      result = await callGroq({
+        providerName: 'Groq',
+        modelName: 'llama-3.3-70b-versatile',
+        apiKey: env.groqApiKey,
+        systemPrompt,
+        message,
+        history: safeHistory,
+      });
+    } else {
+      return fail(
+        res,
+        503,
+        "AI Assistant isn't configured. Add your own AI provider key in Settings → AI Assistant → Integrations, or ask an admin to set GROQ_API_KEY on the server.",
+      );
+    }
+
+    if (!result.success) return fail(res, 502, result.error);
+    ok(res, { reply: result.reply });
   });
 
   return r;

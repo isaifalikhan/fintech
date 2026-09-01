@@ -30,6 +30,8 @@ import {
   upsertBundleToSupabase,
   seedBundleIfEmpty,
 } from '@/services/supabaseBundle';
+import type { AuditLogEntry } from '@/services/auditService';
+import type { PlatformSettings, PlatformPlan } from '@/services/platformService';
 
 /** Re-export for services/tests that imported version from dataStore. */
 export { DATA_STORE_SCHEMA_VERSION };
@@ -62,23 +64,27 @@ const SERIALIZABLE_KEYS = [
   'overheadAllocations', 'recurringTransactions', 'budgets', 'loans', 'cashFlowForecasts',
   'activeSessions', 'notifications',
   'expenses', 'payslips', 'timesheets', 'teamMembers', 'announcements',
+  'platformSettings', 'platformPlans',
 ] as const;
 
 type SerializableKey = (typeof SERIALIZABLE_KEYS)[number];
 
+/**
+ * Basic shape check only — deliberately does NOT require `schemaVersion` to match
+ * `DATA_STORE_SCHEMA_VERSION`, nor every current `SERIALIZABLE_KEYS` entry to already be present.
+ * A bundle from an older schema version legitimately won't have fields added since; rejecting it
+ * outright used to delete every real collection (transactions, accounts, everything) on the very
+ * next schema bump. Per-field backfill from the fresh seed happens in `hydrateBundlePayload()`.
+ */
 export function isValidPersistedBundle(raw: unknown): raw is {
   schemaVersion: number;
   payload: Record<string, unknown>;
 } {
   if (!raw || typeof raw !== 'object') return false;
   const o = raw as Record<string, unknown>;
-  if (o.schemaVersion !== DATA_STORE_SCHEMA_VERSION) return false;
+  if (typeof o.schemaVersion !== 'number') return false;
   const payload = o.payload;
   if (!payload || typeof payload !== 'object') return false;
-  const p = payload as Record<string, unknown>;
-  for (const k of SERIALIZABLE_KEYS) {
-    if (!Array.isArray(p[k])) return false;
-  }
   return true;
 }
 
@@ -108,6 +114,22 @@ class DataStore {
   cashFlowForecasts: CashFlowForecast[];
   activeSessions: ActiveSession[];
   notifications: Notification[];
+  /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory audit log. */
+  auditLogs: AuditLogEntry[] = [];
+  /**
+   * Singleton row (array-of-one), matching the array-based collection pattern — the
+   * hydrate/persist loop assumes arrays. In SERIALIZABLE_KEYS, so unlike auditLogs/backupHistory
+   * this SHOULD persist across reloads.
+   */
+  platformSettings: PlatformSettings[] = [];
+  /** Session-only, not persisted (not in SERIALIZABLE_KEYS) — mirrors server's in-memory backup-history log, same reasoning as auditLogs above. */
+  backupHistory: { id: string; timestamp: string; sizeBytes: number }[] = [];
+  /**
+   * Subscription plan definitions, editable from PlansView (Platform Console → Plans & Billing).
+   * Unlike `platformSettings`, this is a real multi-row collection (like `departments`) — seeded
+   * from the starter Basic/Professional/Enterprise plans in `initialBundle.ts`, not a singleton.
+   */
+  platformPlans: PlatformPlan[];
 
   expenses: EmployeeExpense[];
   payslips: EmployeePayslip[];
@@ -140,6 +162,21 @@ class DataStore {
     }
   }
 
+  /**
+   * Applies a persisted bundle's payload onto this store, field by field. A key that's missing or
+   * not an array (an older schema version's bundle predating that collection) is left at whatever
+   * `loadFromMocks()` already seeded, instead of the whole bundle being discarded — mirrors the
+   * per-field backfill `server/lib/store.ts`'s `load()` already does for `platformPlans`.
+   */
+  private hydrateBundlePayload(payload: Record<string, unknown>): void {
+    for (const k of SERIALIZABLE_KEYS) {
+      const v = payload[k];
+      if (Array.isArray(v)) {
+        (this as unknown as Record<string, unknown>)[k] = deepClone(v);
+      }
+    }
+  }
+
   private tryHydrateFromLocalStorage(): void {
     if (typeof localStorage === 'undefined') return;
     if (this.useRemotePersistence || this.useSupabasePersistence) return;
@@ -152,10 +189,7 @@ class DataStore {
         return;
       }
       this.hydrating = true;
-      const p = parsed.payload as Record<SerializableKey, unknown>;
-      for (const k of SERIALIZABLE_KEYS) {
-        (this as unknown as Record<string, unknown>)[k] = deepClone(p[k]);
-      }
+      this.hydrateBundlePayload(parsed.payload);
       this.hydrating = false;
     } catch {
       try {
@@ -172,6 +206,11 @@ class DataStore {
       payload[k] = deepClone((this as unknown as Record<string, unknown>)[k]);
     }
     return { schemaVersion: DATA_STORE_SCHEMA_VERSION, payload };
+  }
+
+  /** Public snapshot of the full bundle (all real data collections) — used for manual backup downloads. */
+  getSnapshot(): { schemaVersion: number; payload: Record<string, unknown> } {
+    return this.getBundleObject();
   }
 
   private writePersistBundle(): void {
@@ -290,10 +329,7 @@ class DataStore {
       const parsed: unknown = await res.json();
       if (!isValidPersistedBundle(parsed)) return;
       this.hydrating = true;
-      const p = parsed.payload as Record<SerializableKey, unknown>;
-      for (const k of SERIALIZABLE_KEYS) {
-        (this as unknown as Record<string, unknown>)[k] = deepClone(p[k]);
-      }
+      this.hydrateBundlePayload(parsed.payload);
       this.hydrating = false;
       this.useRemotePersistence = true;
       try {
@@ -354,10 +390,7 @@ class DataStore {
     if (!parsed || !isValidPersistedBundle(parsed)) return;
 
     this.hydrating = true;
-    const p = parsed.payload as Record<SerializableKey, unknown>;
-    for (const k of SERIALIZABLE_KEYS) {
-      (this as unknown as Record<string, unknown>)[k] = deepClone(p[k]);
-    }
+    this.hydrateBundlePayload(parsed.payload);
     this.hydrating = false;
     this.useSupabasePersistence = true;
     this.useRemotePersistence = false;

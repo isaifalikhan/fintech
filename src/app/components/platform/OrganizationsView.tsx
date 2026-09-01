@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import { PayrollView } from '../organization/PayrollView';
 
 type EnrichedOrg = Organization & PlatformOrgMeta;
 
@@ -26,6 +27,7 @@ export function OrganizationsView() {
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgAdminEmail, setNewOrgAdminEmail] = useState('');
   const [newOrgPlan, setNewOrgPlan] = useState('Basic (Trial)');
+  const [newOrgCurrency, setNewOrgCurrency] = useState('USD');
   const [creatingOrg, setCreatingOrg] = useState(false);
 
   // Fetch all orgs from the service layer (platform admin sees all)
@@ -47,25 +49,41 @@ export function OrganizationsView() {
     setCreatingOrg(true);
     const res = await organizationService.create({
       name,
-      currency: 'PKR',
+      currency: newOrgCurrency,
       fiscalYearStart: '01-01',
       settings: { theme: 'dark', notifications: true },
     });
-    setCreatingOrg(false);
     if (!res.success) {
+      setCreatingOrg(false);
       toast.error(res.error || 'Could not create organization.');
       return;
     }
-    toast.success(`"${name}" created on the ${newOrgPlan} plan.`);
+
+    const adminEmail = newOrgAdminEmail.trim();
+    if (adminEmail) {
+      const inviteRes = await organizationService.inviteMember(res.data.id, adminEmail, 'owner');
+      if (!inviteRes.success) {
+        toast.warning(
+          `"${name}" was created, but couldn't add ${adminEmail} as owner (${inviteRes.error || 'unknown error'}). Add an owner from Team & Permissions.`
+        );
+      } else {
+        toast.success(`"${name}" created on the ${newOrgPlan} plan. ${adminEmail} added as owner.`);
+      }
+    } else {
+      toast.success(`"${name}" created on the ${newOrgPlan} plan.`);
+    }
+    setCreatingOrg(false);
     setShowCreateForm(false);
     setNewOrgName('');
     setNewOrgAdminEmail('');
     setNewOrgPlan('Basic (Trial)');
+    setNewOrgCurrency('USD');
     await refetchOrgs();
   };
 
   const [viewingOrg, setViewingOrg] = useState<EnrichedOrg | null>(null);
   const [managingOrg, setManagingOrg] = useState<EnrichedOrg | null>(null);
+  const [payrollOrg, setPayrollOrg] = useState<EnrichedOrg | null>(null);
   const [manageName, setManageName] = useState('');
   const [manageCurrency, setManageCurrency] = useState('');
   const [manageFiscalYearStart, setManageFiscalYearStart] = useState('');
@@ -195,7 +213,7 @@ export function OrganizationsView() {
             <Plus className="size-5 text-purple-400" />
             New Organization
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-1">
               <label className="text-xs text-slate-400 font-mono">Organization Name</label>
               <input
@@ -229,6 +247,22 @@ export function OrganizationsView() {
                 <option>Basic (Trial)</option>
                 <option>Professional</option>
                 <option>Enterprise</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400 font-mono">Currency</label>
+              <select
+                value={newOrgCurrency}
+                onChange={(e) => setNewOrgCurrency(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg text-white font-mono text-sm"
+                style={{ background: AXIOM.inputs.background, border: AXIOM.inputs.border }}
+              >
+                <option value="USD">USD</option>
+                <option value="PKR">PKR</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AED">AED</option>
+                <option value="SAR">SAR</option>
               </select>
             </div>
           </div>
@@ -358,6 +392,13 @@ export function OrganizationsView() {
                 >
                   <Settings className="size-4" /> Manage
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPayrollOrg(org)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-300 hover:bg-white/10 transition-colors"
+                >
+                  <FileText className="size-4" /> Payroll
+                </button>
               </div>
             </motion.div>
           );
@@ -447,6 +488,17 @@ export function OrganizationsView() {
               Save Changes
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payroll */}
+      <Dialog open={payrollOrg != null} onOpenChange={(open) => { if (!open) setPayrollOrg(null); }}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payroll — {payrollOrg?.name}</DialogTitle>
+            <DialogDescription>Issue and manage payslips for this organization's employees.</DialogDescription>
+          </DialogHeader>
+          {payrollOrg && <PayrollView orgId={payrollOrg.id} />}
         </DialogContent>
       </Dialog>
     </div>

@@ -27,6 +27,18 @@ export interface Organization {
   settings: {
     theme: string;
     notifications: boolean;
+    /**
+     * Per-role custom permission catalog for the "Roles & Permissions" editor
+     * (`TeamPermissions.tsx`). Keyed by `MemberRole` string (`org_admin`,
+     * `team_member`, `accountant`, `viewer`); value is a list of permission ids
+     * from that file's `allPermissions`, or `['all']` for full access. Optional —
+     * falls back to the file's static `roleDefinitions` when unset.
+     *
+     * NOTE: this is a display/editing catalog only. It is NOT wired into
+     * `authService.hasPermission()`'s 3-level (`read`/`write`/`admin`) authorization
+     * check, which remains the actual enforcement mechanism app-wide.
+     */
+    rolePermissions?: Record<string, string[]>;
   };
 }
 
@@ -44,6 +56,12 @@ export interface User {
    * it once via `server/lib/seedPasswords.ts`.
    */
   passwordHash?: string;
+  /**
+   * Set when this user is platform staff (`platform_admin`/`platform_manager`) invited but not
+   * yet logged in. Undefined means active — mirrors `OrganizationMember.status`'s convention so
+   * existing seeded platform staff need no backfill.
+   */
+  platformStatus?: 'active' | 'pending';
 }
 
 export interface OrganizationMember {
@@ -51,6 +69,8 @@ export interface OrganizationMember {
   organizationId: string;
   role: UserRole;
   joinedAt: string;
+  /** Optional so pre-existing seed/mock rows without it still type-check and are treated as active. */
+  status?: 'active' | 'pending';
 }
 
 export interface Account {
@@ -336,6 +356,8 @@ export interface Notification {
   createdAt: string;
   actionUrl?: string;
   actionLabel?: string;
+  /** Optional grouping used to pick an icon in the notification center. */
+  category?: 'cashflow' | 'categorization' | 'insight' | 'reminder' | 'system';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +393,9 @@ export interface EmployeePayslip {
   net: number;
   currency: string;
   status: 'draft' | 'issued' | 'paid';
+  issuedBy?: string;       // user id of the admin who issued it
+  bankAccountId?: string;  // paying account
+  transactionId?: string;  // linked ledger transaction, set when a transaction was posted
 }
 
 export interface TimesheetEntry {
@@ -460,17 +485,37 @@ export interface TransactionFilters extends PaginationParams, DateRangeFilter {
 
 // Dashboard summary types
 export interface DashboardSummary {
+  /** Lifetime totals — every transaction the org has ever recorded, not scoped to any period. */
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
   profitMargin: number;
+  /** Scoped to the current calendar month — what the "Monthly Profit" KPI actually displays. */
+  monthlyRevenue: number;
+  monthlyExpenses: number;
+  monthlyProfit: number;
   cashOnHand: number;
   accountsReceivable: number;
   accountsPayable: number;
   pendingTransactions: number;
-  revenueChange: number; // percentage
-  expenseChange: number;
-  profitChange: number;
+  /**
+   * % change of the monthly figure above vs. the prior calendar month. `null` (not 0) when the
+   * prior month has no transactions to compare against — a "% change from zero" isn't a real number.
+   */
+  revenueChange: number | null;
+  expenseChange: number | null;
+  profitChange: number | null;
+  /**
+   * The currency `totalRevenue`/`totalExpenses`/`netProfit`/`monthlyRevenue`/`monthlyExpenses`/
+   * `monthlyProfit` are actually computed in (the org's default currency). There's no FX-conversion
+   * mechanism in this app, so those totals only sum transactions recorded in this currency — mixing
+   * currencies into one number would silently misstate it (e.g. a USD org's "Monthly Profit" reading
+   * as if a PKR expense were USD).
+   */
+  revenueExpenseCurrency: string;
+  /** Transactions excluded from totalRevenue/totalExpenses/netProfit because their own `currency`
+   *  differs from `revenueExpenseCurrency`. Surface this in the UI rather than hiding the gap. */
+  otherCurrencyTransactionCount: number;
 }
 
 export interface CashFlowSummary {
@@ -594,4 +639,11 @@ export interface OrgAiIntegrationSettings {
   modelName: string;
   /** Secret — never log; in production store server-side only */
   apiKey: string;
+}
+
+/** One turn in an AI Assistant conversation. Shared by the client chat UI/service and the
+ *  server's provider callers — previously defined twice, identically, in both places. */
+export interface AiChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
 }

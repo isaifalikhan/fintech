@@ -14,6 +14,33 @@ import type { ServiceResponse, PaginatedResult, TransactionFilters, BulkOperatio
 const TXN_BASE = (organizationId: string) =>
   `/organizations/${encodeURIComponent(organizationId)}/transactions`;
 
+/**
+ * Move a bank account's running `balance` for one transaction, in the dataStore branch.
+ *
+ * Mirrors the pattern already established by payroll (`issuePayslip` / `voidPayslip`) and
+ * statement import (`commitParsedImport`): only when the transaction's own `currency` matches the
+ * account's `currency` — this app has no FX-conversion mechanism, so a mismatched-currency amount
+ * is left untouched rather than added/subtracted as if it were equivalent (see CLAUDE.md's
+ * "never pad with fake data" rule).
+ *
+ * `create()` was the one CRUD path that never called this — transactions saved fine but the
+ * linked account's balance silently stayed put. `update()`/`delete()` are fixed the same way so
+ * editing or removing a transaction doesn't leave the balance stale/drifted either.
+ */
+function applyBalanceDelta(
+  bankAccountId: string,
+  currency: string,
+  amount: number,
+  type: 'debit' | 'credit',
+  sign: 1 | -1,
+): void {
+  const acct = dataStore.bankAccounts.find(a => a.id === bankAccountId);
+  if (!acct || acct.currency !== currency) return;
+  const delta = (type === 'credit' ? Math.abs(amount) : -Math.abs(amount)) * sign;
+  acct.balance = (Number(acct.balance) || 0) + delta;
+  dataStore.notify('bankAccounts');
+}
+
 /** Serialize filters to query string for GET list / stats. */
 export function transactionFiltersQuery(filters: TransactionFilters = {}): string {
   const qs = new URLSearchParams();
@@ -179,6 +206,7 @@ export const transactionService = {
     };
 
     dataStore.transactions.unshift(newTxn);
+    applyBalanceDelta(newTxn.bankAccountId, newTxn.currency, newTxn.amount, newTxn.type, 1);
     dataStore.notify('transactions');
 
     return { success: true, data: newTxn, message: 'Transaction created' };
@@ -209,7 +237,14 @@ export const transactionService = {
       return { success: false, data: null as any, error: 'Transaction not found' };
     }
 
-    dataStore.transactions[idx] = { ...dataStore.transactions[idx], ...updates };
+    const prev = dataStore.transactions[idx];
+    const next = { ...prev, ...updates };
+    // Reverse the prior amount's effect on its (old) account, then apply the new amount's effect
+    // on its (possibly different) account — keeps the balance correct across edits to amount,
+    // type, bankAccountId, or currency, not just plain field updates.
+    applyBalanceDelta(prev.bankAccountId, prev.currency, prev.amount, prev.type, -1);
+    applyBalanceDelta(next.bankAccountId, next.currency, next.amount, next.type, 1);
+    dataStore.transactions[idx] = next;
     dataStore.notify('transactions');
 
     return { success: true, data: dataStore.transactions[idx], message: 'Transaction updated' };
@@ -230,6 +265,8 @@ export const transactionService = {
       return { success: false, data: null, error: 'Transaction not found' };
     }
 
+    const txn = dataStore.transactions[idx];
+    applyBalanceDelta(txn.bankAccountId, txn.currency, txn.amount, txn.type, -1);
     dataStore.transactions.splice(idx, 1);
     dataStore.notify('transactions');
 
@@ -311,6 +348,8 @@ export const transactionService = {
       if (idx === -1) {
         errors.push({ id, error: 'Not found' });
       } else {
+        const txn = dataStore.transactions[idx];
+        applyBalanceDelta(txn.bankAccountId, txn.currency, txn.amount, txn.type, -1);
         dataStore.transactions.splice(idx, 1);
         succeeded++;
       }

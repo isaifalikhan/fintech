@@ -213,6 +213,7 @@ export const organizationService = {
       organizationId,
       role,
       joinedAt: new Date().toISOString(),
+      status: 'active',
     };
     dataStore.organizationMembers.push(member);
     dataStore.notify('organizationMembers');
@@ -264,6 +265,7 @@ export const organizationService = {
       organizationId,
       role,
       joinedAt: new Date().toISOString(),
+      status: 'pending',
     };
     dataStore.organizationMembers.push(member);
     dataStore.notify('organizationMembers');

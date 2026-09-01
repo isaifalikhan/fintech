@@ -1,3 +1,4 @@
+import { useOrgCurrency } from '@/hooks/useOrgCurrency';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '@/lib/formatters';
@@ -24,6 +25,7 @@ interface Scenario {
 }
 
 export function CashFlowForecast() {
+  const orgCurrency = useOrgCurrency();
   const svc = useOrgServices();
   const [timeRange, setTimeRange] = useState<'30' | '60' | '90' | '180'>('90');
   const [selectedScenario, setSelectedScenario] = useState<'realistic' | 'best' | 'worst'>('realistic');
@@ -289,7 +291,7 @@ export function CashFlowForecast() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Current Balance</p>
               <p className="text-2xl font-bold text-white">
-                {formatCurrency(currentBalance, 'PKR')}
+                {formatCurrency(currentBalance, orgCurrency)}
               </p>
             </div>
             <div 
@@ -315,10 +317,10 @@ export function CashFlowForecast() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Projected Balance</p>
               <p className={`text-2xl font-bold ${netChange > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {formatCurrency(finalBalance, 'PKR')}
+                {formatCurrency(finalBalance, orgCurrency)}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                {netChange > 0 ? '+' : ''}{formatCurrency(netChange, 'PKR')} change
+                {netChange > 0 ? '+' : ''}{formatCurrency(netChange, orgCurrency)} change
               </p>
             </div>
             <div 
@@ -348,7 +350,7 @@ export function CashFlowForecast() {
             <div>
               <p className="text-slate-400 text-sm mb-1">Burn Rate</p>
               <p className="text-2xl font-bold text-cyan-400">
-                {formatCurrency(burnRateDisplay, 'PKR')}
+                {formatCurrency(burnRateDisplay, orgCurrency)}
               </p>
               <p className="text-xs text-slate-400 mt-1">per day</p>
             </div>
@@ -414,7 +416,7 @@ export function CashFlowForecast() {
             <div className="flex-1">
               <p className="text-sm text-white font-semibold mb-1">Cash Flow Alert</p>
               <p className="text-xs text-slate-400">
-                Your balance may drop below {formatCurrency(cashCrunchThreshold, 'PKR')} on {cashCrunches.length} day(s) 
+                Your balance may drop below {formatCurrency(cashCrunchThreshold, orgCurrency)} on {cashCrunches.length} day(s) 
                 in the next {timeRange} days. Consider:
               </p>
               <ul className="text-xs text-slate-400 mt-2 space-y-1 ml-4">
@@ -490,7 +492,7 @@ export function CashFlowForecast() {
                     borderRadius: '12px',
                     color: '#fff'
                   }}
-                  formatter={(value: any) => formatCurrency(value, 'PKR')}
+                  formatter={(value: any) => formatCurrency(value, orgCurrency)}
                   labelFormatter={(label) => new Date(label).toLocaleDateString()}
                 />
                 <Legend />
@@ -547,7 +549,7 @@ export function CashFlowForecast() {
                     borderRadius: '12px',
                     color: '#fff'
                   }}
-                  formatter={(value: any) => formatCurrency(value, 'PKR')}
+                  formatter={(value: any) => formatCurrency(value, orgCurrency)}
                   labelFormatter={(label) => new Date(label).toLocaleDateString()}
                 />
                 <Area
@@ -604,20 +606,20 @@ export function CashFlowForecast() {
                   className="px-3 py-1 rounded-lg text-sm font-medium"
                   style={month.netFlow > 0 ? AXIOM.badges.success : AXIOM.badges.danger}
                 >
-                  {month.netFlow > 0 ? '+' : ''}{formatCurrency(month.netFlow, 'PKR')}
+                  {month.netFlow > 0 ? '+' : ''}{formatCurrency(month.netFlow, orgCurrency)}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Income</p>
                   <p className="text-lg font-bold text-emerald-400">
-                    {formatCurrency(month.income, 'PKR')}
+                    {formatCurrency(month.income, orgCurrency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Expense</p>
                   <p className="text-lg font-bold text-red-400">
-                    {formatCurrency(month.expense, 'PKR')}
+                    {formatCurrency(month.expense, orgCurrency)}
                   </p>
                 </div>
               </div>
@@ -648,9 +650,9 @@ export function CashFlowForecast() {
             <p className="text-lg font-bold text-white mb-3">AI Insights</p>
             <div className="space-y-2 text-sm text-slate-300">
               {netChange > 0 ? (
-                <p>✓ Your cash position is projected to improve by {formatCurrency(netChange, 'PKR')} over the next {timeRange} days.</p>
+                <p>✓ Your cash position is projected to improve by {formatCurrency(netChange, orgCurrency)} over the next {timeRange} days.</p>
               ) : (
-                <p>⚠ Your cash position may decrease by {formatCurrency(Math.abs(netChange), 'PKR')} over the next {timeRange} days.</p>
+                <p>⚠ Your cash position may decrease by {formatCurrency(Math.abs(netChange), orgCurrency)} over the next {timeRange} days.</p>
               )}
               
               {((Number.isFinite(runwayDays) && runwayDays < 90) ||
@@ -667,11 +669,11 @@ export function CashFlowForecast() {
               )}
 
               {currentBalance > 0 && lowestBalance < currentBalance * 0.5 && (
-                <p>⚠ Your balance may drop to {formatCurrency(lowestBalance, 'PKR')} (50% of current). Plan for this dip.</p>
+                <p>⚠ Your balance may drop to {formatCurrency(lowestBalance, orgCurrency)} (50% of current). Plan for this dip.</p>
               )}
               
-              <p>→ Average daily income: {formatCurrency(chartSeries.length ? totalIncome / chartSeries.length : 0, 'PKR')}</p>
-              <p>→ Average daily expense: {formatCurrency(chartSeries.length ? totalExpense / chartSeries.length : 0, 'PKR')}</p>
+              <p>→ Average daily income: {formatCurrency(chartSeries.length ? totalIncome / chartSeries.length : 0, orgCurrency)}</p>
+              <p>→ Average daily expense: {formatCurrency(chartSeries.length ? totalExpense / chartSeries.length : 0, orgCurrency)}</p>
             </div>
           </div>
         </div>

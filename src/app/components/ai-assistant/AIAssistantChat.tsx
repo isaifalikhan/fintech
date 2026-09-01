@@ -180,16 +180,22 @@ export function AIAssistantChat() {
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          className={`fixed z-50 shadow-2xl border border-primary/15 overflow-hidden ${
-            isMinimized ? 'bottom-6 right-6 w-80' : 'bottom-6 right-6 w-[500px] h-[700px]'
+          // `flex flex-col` is required for the `flex-1` messages area below to actually own a
+          // bounded height — without it the list can't scroll and long conversations get clipped
+          // by `overflow-hidden`. Height/width are capped to the viewport so the header (and its
+          // close button) can never end up off-screen on short windows or small screens.
+          className={`fixed z-50 shadow-2xl border border-primary/15 overflow-hidden flex flex-col ${
+            isMinimized
+              ? 'bottom-6 right-6 w-[min(20rem,calc(100vw-3rem))]'
+              : 'bottom-6 right-6 w-[min(500px,calc(100vw-3rem))] h-[min(700px,calc(100vh-3rem))]'
           }`}
           style={{
             background: '#121826',
             borderRadius: '16px',
           }}
         >
-          {/* Header */}
-          <div className="p-4 border-b border-primary/10 flex items-center justify-between">
+          {/* Header — `shrink-0` so it always stays visible even when messages grow */}
+          <div className="p-4 border-b border-primary/10 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10 border border-primary/15">
                 <Sparkles className="w-5 h-5 text-primary" />
@@ -221,8 +227,9 @@ export function AIAssistantChat() {
 
           {!isMinimized && (
             <>
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {/* Messages — `min-h-0` is what lets this shrink below its content height so
+                  `overflow-y-auto` actually produces a scrollbar instead of overflowing. */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} onQuickQuestion={handleQuickQuestion} />
                 ))}
@@ -243,9 +250,10 @@ export function AIAssistantChat() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input */}
-              <div className="p-4 border-t border-primary/10 bg-[#121826]">
-                <div className="flex items-start gap-3 justify-center">
+              {/* Input — `shrink-0` keeps it pinned; the textarea flexes instead of using a fixed
+                  percentage + 280px floor, which overflowed the panel at narrow widths. */}
+              <div className="p-4 border-t border-primary/10 bg-[#121826] shrink-0">
+                <div className="flex items-end gap-2">
                   <textarea
                     ref={inputRef}
                     value={inputValue}
@@ -257,15 +265,16 @@ export function AIAssistantChat() {
                         handleSend();
                       }
                     }}
+                    rows={2}
                     placeholder="Ask me anything... (press Enter to send)"
-                    className="w-[65%] min-w-[280px] max-w-[720px] min-h-[96px] max-h-[140px] resize-none px-4 py-5 bg-[#121826] border border-[rgba(58,125,255,0.15)] rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[rgba(58,125,255,0.15)] focus-visible:ring-[3px] transition-shadow"
+                    className="flex-1 min-w-0 max-h-[140px] resize-none px-4 py-3 bg-[#121826] border border-[rgba(58,125,255,0.15)] rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[rgba(58,125,255,0.15)] focus-visible:ring-[3px] transition-shadow"
                   />
                   <Button
                     onClick={() => handleSend()}
                     disabled={!inputValue.trim()}
                     variant="energy"
                     size="icon"
-                    className="mt-7 shrink-0"
+                    className="shrink-0"
                     aria-label="Send message"
                   >
                     <Send className="w-4 h-4" />
