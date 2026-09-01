@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Send, Loader2, MessageCircle } from 'lucide-react';
 
 type ChatRole = 'user' | 'assistant';
@@ -32,6 +32,11 @@ export interface AiChatPanelProps {
   emptyStateHint?: string;
 }
 
+/** Imperative handle so callers (e.g. an "ask about this" button elsewhere on the page) can push a message into the chat without lifting its state. */
+export interface AiChatPanelHandle {
+  sendMessage: (text: string) => void;
+}
+
 /** Hard cap (paste + typing); soft threshold shows a calm warning only */
 const CHAT_INPUT_MAX = 4000;
 const CHAT_SOFT_WARN = 2000;
@@ -43,14 +48,14 @@ const CHAT_SOFT_WARN = 2000;
  * surface-agnostic — it does not call `useOrgServices()` or any org-scoped service. Callers
  * own their own data/settings fetching and pass in demo content via props.
  */
-export function AiChatPanel({
+export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(function AiChatPanel({
   title,
   subtitle,
   quickPrompts,
   getReply,
   placeholder = 'Ask a question…',
   emptyStateHint = 'Start a conversation. Answers below are sample data until this is connected to a live backend.',
-}: AiChatPanelProps) {
+}, ref) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -104,6 +109,10 @@ export function AiChatPanel({
       setSending(false);
     }
   }, [input, sending, getReply]);
+
+  useImperativeHandle(ref, () => ({
+    sendMessage: (text: string) => void handleSend(text),
+  }), [handleSend]);
 
   return (
     <motion.section
@@ -255,4 +264,4 @@ export function AiChatPanel({
       </div>
     </motion.section>
   );
-}
+});
