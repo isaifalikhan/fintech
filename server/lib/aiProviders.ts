@@ -8,10 +8,7 @@
  * `openai` for a single call site.
  */
 
-export interface AiChatTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import type { AiChatTurn } from '../../src/services/types.js';
 
 export interface AiProviderRequest {
   providerName: string;
@@ -62,10 +59,15 @@ async function callAnthropic(req: AiProviderRequest): Promise<AiProviderResult> 
   }
 }
 
-async function callOpenAiCompatible(req: AiProviderRequest): Promise<AiProviderResult> {
-  const model = req.modelName?.trim() || 'gpt-4o-mini';
+async function callOpenAiCompatible(
+  req: AiProviderRequest,
+  baseUrl: string,
+  defaultModel: string,
+  providerLabel: string,
+): Promise<AiProviderResult> {
+  const model = req.modelName?.trim() || defaultModel;
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch(baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,15 +84,29 @@ async function callOpenAiCompatible(req: AiProviderRequest): Promise<AiProviderR
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) {
-      const msg = (body && body.error?.message) || `OpenAI API error (${res.status})`;
+      const msg = (body && body.error?.message) || `${providerLabel} API error (${res.status})`;
       return { success: false, error: msg };
     }
     const text = body?.choices?.[0]?.message?.content;
-    if (!text) return { success: false, error: 'OpenAI returned an empty response.' };
+    if (!text) return { success: false, error: `${providerLabel} returned an empty response.` };
     return { success: true, reply: text };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Could not reach OpenAI API.' };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : `Could not reach ${providerLabel} API.`,
+    };
   }
+}
+
+/** Zero-config fallback tier: Groq's endpoint is OpenAI-request-shaped, so this reuses the same
+ *  caller with Groq's base URL and free-tier model instead of a parallel implementation. */
+export async function callGroq(req: AiProviderRequest): Promise<AiProviderResult> {
+  return callOpenAiCompatible(
+    req,
+    'https://api.groq.com/openai/v1/chat/completions',
+    'llama-3.3-70b-versatile',
+    'Groq',
+  );
 }
 
 /** Routes by provider name (free text, e.g. "Anthropic", "OpenAI", "Azure OpenAI"). Anything
@@ -102,5 +118,5 @@ export async function callConfiguredAiProvider(req: AiProviderRequest): Promise<
   if (name.includes('anthropic') || name.includes('claude')) {
     return callAnthropic(req);
   }
-  return callOpenAiCompatible(req);
+  return callOpenAiCompatible(req, 'https://api.openai.com/v1/chat/completions', 'gpt-4o-mini', 'OpenAI');
 }
