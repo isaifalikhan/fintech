@@ -1,8 +1,12 @@
+import { useCallback } from 'react';
 import { motion } from 'motion/react';
-import { Bot, DollarSign, Clock, FileText, ArrowRight } from 'lucide-react';
+import { DollarSign, Clock, FileText, ArrowRight } from 'lucide-react';
 import { PageShell, PageHeader } from '../layout';
 import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { AXIOM } from '../../../styles/axiom-tokens';
+import { useAuth } from '@/contexts/AuthContext';
+import { sendAiChatMessage } from '@/services/aiAssistantService';
+import type { AiChatTurn } from '@/services/types';
 import type { EmployeeView } from './EmployeeWorkspace';
 
 interface EmployeeAiAssistantProps {
@@ -15,38 +19,6 @@ const CHAT_QUICK_PROMPTS = [
   'When is my next payslip?',
 ];
 
-const CHAT_SAMPLE_RESPONSES: { trigger: string[]; response: string; suggestions?: string[] }[] = [
-  {
-    trigger: ['hour', 'timesheet', 'week'],
-    response:
-      "Demo answer: your logged hours for this week would appear here from your timesheet. This is a mock response until the API is wired — check My Timesheet for the real numbers.",
-    suggestions: ['View my timesheet', 'How do I log overtime?'],
-  },
-  {
-    trigger: ['expense', 'claim', 'reimburse'],
-    response:
-      'Demo answer: the status of your most recent expense claim would appear here. This is a mock response until the API is wired — check My Expenses for the real status.',
-    suggestions: ['View my expenses', 'How long does approval take?'],
-  },
-  {
-    trigger: ['payslip', 'pay', 'salary'],
-    response:
-      "Demo answer: your next payslip date would appear here based on your organization's pay schedule. This is a mock response until the API is wired — check Payslips for the real date.",
-    suggestions: ['View my payslips', 'Who do I contact about pay?'],
-  },
-];
-
-function matchDemoReply(text: string): { response: string; suggestions?: string[] } {
-  const lower = text.toLowerCase();
-  const hit = CHAT_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
-  if (hit) return { response: hit.response, suggestions: hit.suggestions };
-  return {
-    response:
-      'I can help with questions about your hours, expenses, projects, and payslips. This reply is a demo — in production it would use your real employee data. Try a quick prompt or ask something specific.',
-    suggestions: CHAT_QUICK_PROMPTS,
-  };
-}
-
 const QUICK_ACTIONS: { id: EmployeeView; label: string; description: string; icon: typeof DollarSign; color: 'green' | 'blue' | 'purple' }[] = [
   { id: 'expenses', label: 'View My Expenses', description: 'Check claim status and submit new expenses', icon: DollarSign, color: 'green' },
   { id: 'timesheet', label: 'View My Timesheet', description: 'Review logged hours and entries', icon: Clock, color: 'blue' },
@@ -54,6 +26,18 @@ const QUICK_ACTIONS: { id: EmployeeView; label: string; description: string; ico
 ];
 
 export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
+  const { currentOrganization } = useAuth();
+  const orgId = currentOrganization?.id ?? 'org-001';
+
+  const getChatReply = useCallback(
+    async (text: string, history: AiChatTurn[]): Promise<{ response: string }> => {
+      const res = await sendAiChatMessage(orgId, text, history, 'employee');
+      if (!res.success) throw new Error(res.error || 'Something went wrong. Try again.');
+      return { response: res.data.reply };
+    },
+    [orgId],
+  );
+
   return (
     <PageShell>
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
@@ -65,11 +49,11 @@ export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
 
       <AiChatPanel
         title="AI Assistant"
-        subtitle="Demo replies for now — type a question or use a quick prompt. Live answers will use your employee data when connected."
+        subtitle="Real answers grounded in your own timesheet, expenses, and payslips — or ask anything about how to use Finance OS."
         quickPrompts={CHAT_QUICK_PROMPTS}
-        getReply={matchDemoReply}
+        getReply={getChatReply}
         placeholder="Ask about your hours, expenses, or payslips…"
-        emptyStateHint="Start a conversation about your work. Answers below are sample data until this is connected to a live backend."
+        emptyStateHint="Start a conversation about your work or Finance OS itself."
       />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
@@ -108,11 +92,6 @@ export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
           ))}
         </div>
       </motion.div>
-
-      <div className="flex items-start gap-3 px-1 text-xs text-slate-500">
-        <Bot className="size-4 shrink-0 mt-0.5" aria-hidden />
-        <p>This assistant answers with sample data until it&apos;s connected to a live backend.</p>
-      </div>
     </PageShell>
   );
 }

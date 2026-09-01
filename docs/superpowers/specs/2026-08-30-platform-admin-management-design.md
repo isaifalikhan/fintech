@@ -26,6 +26,16 @@ today exist only via hardcoded `mockUsers` entries in `src/data/mockDatabase.ts`
 - **Escalation guard:** a `platform_manager` may only invite new `platform_manager` accounts. Only a
   `platform_admin` may invite a new `platform_admin`. Enforced server-side (authoritative) and
   mirrored client-side (UX convenience only — hides the disallowed option, not a security boundary).
+  **Caveat (added post-implementation, final review finding):** the server-side check only binds
+  when the Express/SQLite backend is active (`isHttpBackendConfigured()` returning true). This
+  repo's own `.env` sets `VITE_USE_SUPABASE_DATA=true`, which makes `isHttpBackendConfigured()`
+  return `false` unconditionally regardless of `VITE_API_BASE_URL` — so in the app's actual default
+  running mode, `inviteStaff` never reaches the server route at all, and the hidden `<option>` is
+  the *only* thing standing between a manager and creating a `platform_admin` row. This is not a bug
+  to fix here: mock/Supabase-data mode writes the whole `dataStore` from the browser, so any
+  client-side check would be trivially bypassable and would create false confidence rather than real
+  security. Treat this guard as a real, load-bearing control only when the app is actually running
+  against the Express backend — not as a property of the feature in general.
 - **Creation flow:** email invite, mirroring `organizationService.inviteMember` / Team & Permissions
   exactly — find-or-create the `User` by email, mark pending, send a real invite email via
   `sb.auth.admin.inviteUserByEmail` when Supabase admin is configured, otherwise a silent local mock

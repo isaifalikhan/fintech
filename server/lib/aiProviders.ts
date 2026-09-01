@@ -1,8 +1,8 @@
 /**
  * Minimal server-side client for org-configured "bring your own key" AI providers
  * (see `OrgAiIntegrationSettings` / `IntegrationsSettings.tsx`). Only called when an org has
- * `useCustomKey: true` and a non-empty `apiKey` — otherwise callers fall back to the existing
- * local demo replies (`matchDemoReply` etc.), same as before this existed.
+ * `useCustomKey: true` and a non-empty `apiKey` — otherwise the `/ai-chat` route falls back to
+ * the server's own Groq key (`callGroq`), or an honest "not configured" error if neither is set.
  *
  * Deliberately dependency-free (plain `fetch`) rather than pulling in `@anthropic-ai/sdk` /
  * `openai` for a single call site.

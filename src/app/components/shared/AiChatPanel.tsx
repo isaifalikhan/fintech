@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Send, Loader2, MessageCircle } from 'lucide-react';
+import type { AiChatTurn } from '@/services/types';
 
 type ChatRole = 'user' | 'assistant';
 
@@ -19,13 +20,16 @@ export interface AiChatPanelProps {
   /** Prompt chips shown in the empty state; clicking one sends it immediately */
   quickPrompts: string[];
   /**
-   * Pluggable reply generator. Each caller (org, platform, ...) supplies its own logic — a
-   * synchronous canned-response lookup, or an async one that calls a real backend first and
-   * falls back to a canned reply (see `AIFinancialAssistant`'s `getChatReply`).
+   * Sends the new message plus everything said so far (oldest first, not including the new
+   * message) to a real backend and resolves with the assistant's reply. Each caller (org,
+   * employee, ...) supplies its own org/surface-scoped call — see `AIFinancialAssistant`'s and
+   * `EmployeeAiAssistant`'s `getChatReply`. Throw (or reject with) an Error to surface a message
+   * via the panel's built-in error banner.
    */
   getReply: (
     text: string,
-  ) => { response: string; suggestions?: string[] } | Promise<{ response: string; suggestions?: string[] }>;
+    history: AiChatTurn[],
+  ) => Promise<{ response: string; suggestions?: string[] }>;
   /** Placeholder text for the composer textarea */
   placeholder?: string;
   /** Helper copy shown in the empty state, above the quick prompts */
@@ -54,8 +58,13 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
   quickPrompts,
   getReply,
   placeholder = 'Ask a question…',
+<<<<<<< HEAD
   emptyStateHint = 'Start a conversation. Answers below are sample data until this is connected to a live backend.',
 }, ref) {
+=======
+  emptyStateHint = 'Start a conversation.',
+}: AiChatPanelProps) {
+>>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -83,6 +92,13 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
     if (raw.length > CHAT_INPUT_MAX) return;
     setSendError(null);
 
+    // History sent to getReply is everything said BEFORE this new message — captured from state
+    // now, before the user bubble below is added to it.
+    const historyBeforeThisMessage: AiChatTurn[] = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -94,7 +110,11 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
     setSending(true);
 
     try {
+<<<<<<< HEAD
       const { response, suggestions } = await getReply(raw);
+=======
+      const { response, suggestions } = await getReply(raw, historyBeforeThisMessage);
+>>>>>>> worktree-ai-assistant-groq-v2
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
@@ -108,7 +128,7 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
     } finally {
       setSending(false);
     }
-  }, [input, sending, getReply]);
+  }, [input, sending, messages, getReply]);
 
   useImperativeHandle(ref, () => ({
     sendMessage: (text: string) => void handleSend(text),
@@ -242,7 +262,7 @@ export const AiChatPanel = forwardRef<AiChatPanelHandle, AiChatPanelProps>(funct
           >
             <span className={input.length > CHAT_SOFT_WARN ? 'text-amber-200/85' : 'text-slate-600'}>
               {input.length > CHAT_SOFT_WARN
-                ? 'Long messages may feel slower in the demo. Consider shortening.'
+                ? 'Long messages may take a moment to process. Consider shortening.'
                 : ' '}
             </span>
             <span

@@ -1,26 +1,28 @@
 import { motion } from 'motion/react';
+<<<<<<< HEAD
 import { useEffect, useMemo, useRef, useState } from 'react';
+=======
+import { useCallback, useEffect, useMemo, useState } from 'react';
+>>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
 import { useOrgServices } from '@/hooks/useOrgServices';
 import { useService, useServiceArray } from '@/hooks/useService';
 import { fetchOrgAiSettings } from '@/services/aiSettingsService';
 import { sendAiChatMessage } from '@/services/aiAssistantService';
 import { organizationService } from '@/services/organizationService';
 import { auditService } from '@/services/auditService';
+<<<<<<< HEAD
 import { isHttpBackendConfigured } from '@/lib/apiClient';
 import type { OrgAiIntegrationSettings } from '@/services/types';
 import { AiChatPanel, type AiChatPanelHandle } from '@/app/components/shared/AiChatPanel';
+=======
+import type { AiChatTurn, OrgAiIntegrationSettings } from '@/services/types';
+import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
+>>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
 import { useOrgWorkspaceNav } from './OrgWorkspaceNavContext';
 import { AXIOM } from '../../../styles/axiom-tokens';
 import {
   Brain,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle2,
   Lightbulb,
-  Target,
-  Users,
-  PieChart,
   Activity,
   MessageCircle,
   Search,
@@ -33,66 +35,12 @@ import {
   Shield,
 } from 'lucide-react';
 
-interface AIInsight {
-  id: string;
-  type: 'warning' | 'opportunity' | 'success' | 'info';
-  category: string;
-  title: string;
-  description: string;
-  impact: 'high' | 'medium' | 'low';
-  actionable: boolean;
-  recommendation?: string;
-}
-
-interface FinancialPattern {
-  id: string;
-  pattern: string;
-  frequency: string;
-  trend: 'increasing' | 'decreasing' | 'stable';
-  suggestion: string;
-}
-
-const CHAT_SAMPLE_RESPONSES: {
-  trigger: string[];
-  response: string;
-  suggestions?: string[];
-}[] = [
-  {
-    trigger: ['profit', 'margin'],
-    response:
-      'Your profit margin for this month is 28%, which is about 3% higher than last month in this demo. In production this would use your ledger.',
-    suggestions: ['Show me department profitability', 'Which clients are most profitable?'],
-  },
-  {
-    trigger: ['cash', 'flow', 'balance'],
-    response:
-      'Demo answer: cash and runway here are illustrative. Connect live data to personalize this.',
-    suggestions: ['Show cash flow forecast', 'List upcoming expenses'],
-  },
-  {
-    trigger: ['expense', 'spending'],
-    response:
-      'Top expense categories would appear here from your categorized transactions. This is a mock response until the API is wired.',
-    suggestions: ['Show expense breakdown', 'Compare to last quarter'],
-  },
-];
-
 const CHAT_QUICK_PROMPTS = [
   'How is my cash position?',
   'What are my biggest expenses?',
   'Explain profit margin trends',
+  'How do I invite a team member?',
 ];
-
-function matchDemoReply(text: string): { response: string; suggestions?: string[] } {
-  const lower = text.toLowerCase();
-  const hit = CHAT_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
-  if (hit) return { response: hit.response, suggestions: hit.suggestions };
-  return {
-    response:
-      'I can help with cash flow, expenses, margins, and forecasts. This reply is a demo — in production it would use your org data. Try the quick prompts or ask something specific.',
-    suggestions: ['Why did profit change?', 'Show cash flow forecast'],
-  };
-}
 
 type AIPortalTab = 'ask' | 'insights' | 'activity';
 
@@ -148,13 +96,29 @@ export function AIFinancialAssistant() {
     return () => window.removeEventListener('finance-os-ai-settings', sync);
   }, [orgId]);
 
-  const hasLiveAiProvider = !!(aiSettings?.useCustomKey && aiSettings.apiKey.trim());
+  /** Server resolves the org's own configured provider key first, then the free Groq fallback,
+   *  then an honest "not configured" error — this component doesn't need to know which. */
+  const getChatReply = useCallback(
+    async (text: string, history: AiChatTurn[]): Promise<{ response: string }> => {
+      const res = await sendAiChatMessage(orgId, text, history, 'org');
+      if (!res.success) throw new Error(res.error || 'Something went wrong. Try again.');
+      return { response: res.data.reply };
+    },
+    [orgId],
+  );
 
+<<<<<<< HEAD
   /** In local-HTTP mode, always sends to the real `/ai-chat` route — it resolves to the org's own
    *  configured provider key if set, otherwise the server's built-in Groq fallback, so a reply is
    *  "live" either way; a genuine failure (bad key, provider outage, nothing configured at all) is
    *  surfaced as an honest error rather than silently swapped for a canned reply. Mock/Supabase mode
    *  has no server to proxy through, so it keeps using the local demo replies. */
+=======
+<<<<<<< HEAD
+  /** Tries the org's configured provider (server-side proxy) first; falls back to the local
+   *  demo reply on any failure — missing/invalid key, provider outage, or mock/Supabase mode
+   *  where there's no server to proxy through. Never throws: the fallback IS the error handling. */
+>>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
   const getChatReply = async (text: string): Promise<{ response: string; suggestions?: string[] }> => {
     if (isHttpBackendConfigured()) {
       const res = await sendAiChatMessage(orgId, text, [], 'org');
@@ -166,6 +130,10 @@ export function AIFinancialAssistant() {
 
   // ── Task 2: real, computed insights (Ask tab's KPI/insights below stay demo — out of scope) ──
   const { data: txnResult, loading: txnLoading } = useService(
+=======
+  // ── Task 2: real, computed insights ──
+  const { data: txnResult } = useService(
+>>>>>>> worktree-ai-assistant-groq-v2
     () => svc.transactions.getAll({ pageSize: 500 }),
     [svc.orgId],
     ['transactions'],
@@ -298,72 +266,6 @@ export function AIFinancialAssistant() {
     { id: 'activity', label: 'Activity', icon: Activity },
   ];
 
-  const aiInsights: AIInsight[] = [
-    {
-      id: '1',
-      type: 'warning',
-      category: 'Personal vs Business',
-      title: 'High Personal Expense Ratio Detected',
-      description: 'You\'re drawing 42% of business revenue as personal expenses. Industry standard for agencies is 15-25%.',
-      impact: 'high',
-      actionable: true,
-      recommendation: 'Consider reducing personal drawings to PKR 180,000/month to maintain healthy cash flow.'
-    }
-  ];
-
-  const financialPatterns: FinancialPattern[] = [
-    {
-      id: '1',
-      pattern: 'Peak Revenue Months',
-      frequency: 'Q4 (Oct-Dec)',
-      trend: 'increasing',
-      suggestion: 'Your revenue increases 35% in Q4. Plan for increased hiring/expenses in Q3 to capture demand.'
-    },
-    {
-      id: '2',
-      pattern: 'Cash Withdrawal Pattern',
-      frequency: 'Every 15th of month',
-      trend: 'stable',
-      suggestion: 'You consistently withdraw PKR 150,000 on the 15th. Set up automated transfer for better planning.'
-    },
-    {
-      id: '3',
-      pattern: 'Client Payment Delays',
-      frequency: 'Average 18 days',
-      trend: 'increasing',
-      suggestion: 'Payment delays increasing by 3 days/quarter. Implement stricter payment terms or advance billing.'
-    },
-    {
-      id: '4',
-      pattern: 'Office Expense Spike',
-      frequency: 'January & July',
-      trend: 'stable',
-      suggestion: 'Office expenses spike in Jan (utilities) and July (maintenance). Budget extra PKR 40,000 for these months.'
-    }
-  ];
-
-  const currentSituation = {
-    cashPosition: 'healthy',
-    burnRate: 'PKR 420,000/month',
-    runway: '8.5 months',
-    profitMargin: '32%',
-    personalDrawings: '42% of revenue (too high)',
-    teamUtilization: '78%'
-  };
-
-  const futureProjections = {
-    nextQuarter: {
-      revenue: 'PKR 1.85M',
-      profit: 'PKR 580K',
-      confidence: 85
-    },
-    nextYear: {
-      revenue: 'PKR 7.2M',
-      profit: 'PKR 2.3M',
-      confidence: 72
-    }
-  };
-
   return (
     <div className="min-h-screen p-8 space-y-6" style={{ background: '#0a0a0a' }}>
       {/* Header with Dashboard Gradient */}
@@ -390,7 +292,7 @@ export function AIFinancialAssistant() {
             Integration: {aiSettings.providerName.trim() || 'Custom provider'}
             {aiSettings.modelName.trim() ? ` · Model: ${aiSettings.modelName.trim()}` : ''}
             {aiSettings.useCustomKey && aiSettings.apiKey
-              ? ' · Live — the Ask tab below sends real messages to this provider (local-HTTP mode only; falls back to demo replies otherwise).'
+              ? ' · This key powers the chat below.'
               : ''}
           </p>
         )}
@@ -467,6 +369,7 @@ export function AIFinancialAssistant() {
       </motion.div>
 
       {activeTab === 'ask' && (
+<<<<<<< HEAD
       <>
       {/* ORG-P04: chat panel — send path + empty state + errors in UI */}
       <AiChatPanel
@@ -1001,6 +904,16 @@ export function AIFinancialAssistant() {
         </div>
       </motion.div>
       </>
+=======
+        <AiChatPanel
+          title="Ask the assistant"
+          subtitle="Real answers grounded in your organization's data — ask about cash flow, expenses, margins, how to use Finance OS, or general finance questions."
+          quickPrompts={CHAT_QUICK_PROMPTS}
+          getReply={getChatReply}
+          placeholder="Ask about cash flow, expenses, margins, or how to use Finance OS…"
+          emptyStateHint="Start a conversation about your organization's finances or Finance OS itself."
+        />
+>>>>>>> fffd0e898e03d9f1d4ab20001149b15c2c9339d5
       )}
 
       {/* Task 2: real, computed Insights tab */}

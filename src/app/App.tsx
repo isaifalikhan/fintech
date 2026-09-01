@@ -49,9 +49,6 @@ const CommandPalette = React.lazy(() =>
 const KeyboardShortcuts = React.lazy(() =>
   import('./components/keyboard-shortcuts/KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts }))
 );
-const AIAssistantChat = React.lazy(() =>
-  import('./components/ai-assistant/AIAssistantChat').then(m => ({ default: m.AIAssistantChat }))
-);
 
 // Error Boundary
 class ErrorBoundary extends Component<
@@ -316,9 +313,6 @@ export default function App() {
                 </SilentErrorBoundary>
                 <SilentErrorBoundary>
                   <KeyboardShortcuts />
-                </SilentErrorBoundary>
-                <SilentErrorBoundary>
-                  <AIAssistantChat />
                 </SilentErrorBoundary>
                 <ErrorBoundary>
                   <AppRoutes />

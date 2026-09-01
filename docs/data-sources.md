@@ -65,8 +65,9 @@ constant applied regardless of currency.
 - **`OrganizationDashboardModern.tsx`** — `departmentData` (12-month sine wave) and
   `expenseCategoryData` (hardcoded donut). `reports.getExpenseBreakdown()` exists and is unused.
   **Monthly Goals** rings (75% / 60%) are literals with no goals feature behind them.
-- **AI Assistant** — replies come from `SAMPLE_RESPONSES` keyword matching, not an LLM. Labelled as a
-  demo in the UI.
+- **Platform AI Portal** (`PlatformAiPortal.tsx`) — replies come from `PLATFORM_SAMPLE_RESPONSES`
+  keyword matching, not an LLM. Labelled as a demo in the UI. (The org workspace and employee
+  portal assistants are wired to a real backend — see `server/routes/organizations.ts` `/ai-chat`.)
 - **`PlatformSettingsView.tsx` / `PlansView.tsx`** — no persistence layer exists; toggles and
   "Save"/"Create Plan"/"Edit Plan" have nowhere to write.
 - **Onboarding tour** — steps 1/2/5 are static marketing copy (intentional). Step 4 uses your real CSV
