@@ -5,6 +5,7 @@ import { Brain, MessageCircle, Sparkles, AlertCircle, Clock, Database, Users, Ch
 import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { useService } from '@/hooks/useService';
 import { platformService } from '@/services/platformService';
+import type { AiChatTurn } from '@/services/types';
 
 /**
  * Platform-wide AI Portal (QA fix: platform admins previously had no AI surface at all —
@@ -54,7 +55,10 @@ const PLATFORM_QUICK_PROMPTS = [
   'How are trial organizations converting?',
 ];
 
-function matchPlatformDemoReply(text: string): { response: string; suggestions?: string[] } {
+async function matchPlatformDemoReply(
+  text: string,
+  _history: AiChatTurn[],
+): Promise<{ response: string; suggestions?: string[] }> {
   const lower = text.toLowerCase();
   const hit = PLATFORM_SAMPLE_RESPONSES.find((r) => r.trigger.some((k) => lower.includes(k)));
   if (hit) return { response: hit.response, suggestions: hit.suggestions };

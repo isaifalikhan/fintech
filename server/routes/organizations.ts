@@ -220,6 +220,14 @@ export function createOrganizationRouter(): Router {
     if (surface !== 'org' && surface !== 'employee') {
       return fail(res, 400, 'surface must be "org" or "employee"');
     }
+    // Employees may only use the employee-scoped surface — `org` exposes the full org financial
+    // digest (balances, budgets, loans, projects, team counts). `req.orgMembership` is undefined
+    // for platform staff (they bypass `requireOrgMembership` entirely), so only block real
+    // org-member employees here.
+    const callerRole = req.orgMembership?.role;
+    if (surface === 'org' && callerRole === 'employee') {
+      return fail(res, 403, 'Employees can only use the employee assistant surface.');
+    }
     const safeHistory: AiChatTurn[] = Array.isArray(history)
       ? history.filter(
           (h): h is AiChatTurn =>
