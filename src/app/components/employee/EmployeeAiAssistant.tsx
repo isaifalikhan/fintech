@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { motion } from 'motion/react';
-import { Bot, DollarSign, Clock, FileText, ArrowRight } from 'lucide-react';
+import { DollarSign, Clock, FileText, ArrowRight } from 'lucide-react';
 import { PageShell, PageHeader } from '../layout';
 import { AiChatPanel } from '@/app/components/shared/AiChatPanel';
 import { AXIOM } from '../../../styles/axiom-tokens';
@@ -92,11 +92,6 @@ export function EmployeeAiAssistant({ onNavigate }: EmployeeAiAssistantProps) {
           ))}
         </div>
       </motion.div>
-
-      <div className="flex items-start gap-3 px-1 text-xs text-slate-500">
-        <Bot className="size-4 shrink-0 mt-0.5" aria-hidden />
-        <p>This assistant answers with sample data until it&apos;s connected to a live backend.</p>
-      </div>
     </PageShell>
   );
 }
